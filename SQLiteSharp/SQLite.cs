@@ -1640,19 +1640,14 @@ public partial class SQLiteConnection : ISQLiteConnection {
     }
 
     protected virtual void Dispose(bool disposing) {
-        bool useClose2 = LibVersionNumber >= 3007014;
-
         if (_open && Handle is not null) {
             try {
+                SQLite3.Result result = SQLite3.Close(Handle);
                 if (disposing) {
-                    SQLite3.Result result = useClose2 ? SQLite3.Close2(Handle) : SQLite3.Close(Handle);
-                    if (result != SQLite3.Result.OK) {
+                    if (result is not SQLite3.Result.OK) {
                         string msg = SQLite3.GetErrmsg(Handle);
                         throw new SQLiteException(result, msg);
                     }
-                }
-                else {
-                    SQLite3.Result result = useClose2 ? SQLite3.Close2(Handle) : SQLite3.Close(Handle);
                 }
             }
             finally {
@@ -3242,9 +3237,6 @@ public static class SQLite3 {
         return (Result)Sqlite3.sqlite3_open_v2(filename, out db, flags, vfsName);
     }
     public static Result Close(Sqlite3DatabaseHandle db) {
-        return (Result)Sqlite3.sqlite3_close(db);
-    }
-    public static Result Close2(Sqlite3DatabaseHandle db) {
         return (Result)Sqlite3.sqlite3_close_v2(db);
     }
     public static Result BusyTimeout(Sqlite3DatabaseHandle db, int milliseconds) {
