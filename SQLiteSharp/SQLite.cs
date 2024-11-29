@@ -175,11 +175,11 @@ public partial class SQLiteConnection : ISQLiteConnection {
     /// <summary>
     /// Gets the database path used by this connection.
     /// </summary>
-    public string DatabasePath { get; private set; }
+    public string DatabasePath { get; }
     /// <summary>
     /// Gets the SQLite library version number. 3007014 would be v3.7.14
     /// </summary>
-    public int LibVersionNumber { get; private set; }
+    public int LibVersionNumber { get; }
     /// <summary>
     /// Whether Trace lines should be written that show the execution time of queries.
     /// </summary>
@@ -1812,14 +1812,9 @@ public partial class SQLiteConnection : ISQLiteConnection {
     public event EventHandler<NotifyTableChangedEventArgs>? TableChanged;
 }
 
-public class NotifyTableChangedEventArgs : EventArgs {
-    public TableMapping Table { get; private set; }
-    public NotifyTableChangedAction Action { get; private set; }
-
-    public NotifyTableChangedEventArgs(TableMapping table, NotifyTableChangedAction action) {
-        Table = table;
-        Action = action;
-    }
+public class NotifyTableChangedEventArgs(TableMapping table, NotifyTableChangedAction action) : EventArgs {
+    public TableMapping Table { get; } = table;
+    public NotifyTableChangedAction Action { get; } = action;
 }
 
 public enum NotifyTableChangedAction {
@@ -1951,7 +1946,7 @@ public class UniqueAttribute : IndexedAttribute {
 
 [AttributeUsage(AttributeTargets.Property)]
 public class MaxLengthAttribute(int length) : Attribute {
-    public int Value { get; private set; } = length;
+    public int Value { get; } = length;
 }
 
 /// <summary>
@@ -1961,7 +1956,7 @@ public class MaxLengthAttribute(int length) : Attribute {
 /// </summary>
 [AttributeUsage(AttributeTargets.Property)]
 public class CollationAttribute(string collation) : Attribute {
-    public string Value { get; private set; } = collation;
+    public string Value { get; } = collation;
 }
 
 [AttributeUsage(AttributeTargets.Property)]
@@ -1973,15 +1968,15 @@ public class StoreAsTextAttribute : Attribute {
 }
 
 public class TableMapping {
-    public Type MappedType { get; private set; }
-    public string TableName { get; private set; }
-    public bool WithoutRowId { get; private set; }
-    public Column[] Columns { get; private set; }
-    public Column? PrimaryKey { get; private set; }
-    public string GetByPrimaryKeySql { get; private set; }
-    public CreateFlags CreateFlags { get; private set; }
+    public Type MappedType { get; }
+    public string TableName { get; }
+    public bool WithoutRowId { get; }
+    public Column[] Columns { get; }
+    public Column? PrimaryKey { get; }
+    public string GetByPrimaryKeySql { get; }
+    public CreateFlags CreateFlags { get; }
 
-    internal MapMethod Method { get; private set; } = MapMethod.ByName;
+    internal MapMethod Method { get; } = MapMethod.ByName;
 
     private readonly Column? _autoIncrementedPrimaryKey;
     private readonly Column[] _insertColumns;
@@ -2049,18 +2044,18 @@ public class TableMapping {
     }
 
     public class Column {
-        public string Name { get; private set; }
+        public string Name { get; }
         public PropertyInfo? PropertyInfo => _memberInfo as PropertyInfo;
         public string PropertyName { get => _memberInfo.Name; }
-        public Type ColumnType { get; private set; }
-        public string Collation { get; private set; }
-        public bool IsAutoIncrement { get; private set; }
-        public bool IsAutoGuid { get; private set; }
-        public bool IsPrimaryKey { get; private set; }
-        public IEnumerable<IndexedAttribute> Indices { get; private set; }
-        public bool IsNullable { get; private set; }
-        public int? MaxStringLength { get; private set; }
-        public bool StoreAsText { get; private set; }
+        public Type ColumnType { get; }
+        public string Collation { get; }
+        public bool IsAutoIncrement { get; }
+        public bool IsAutoGuid { get; }
+        public bool IsPrimaryKey { get; }
+        public IEnumerable<IndexedAttribute> Indices { get; }
+        public bool IsNullable { get; }
+        public int? MaxStringLength { get; }
+        public bool StoreAsText { get; }
 
         private readonly MemberInfo _memberInfo;
 
@@ -2907,11 +2902,7 @@ public enum CreateTableResult {
 }
 
 public class CreateTablesResult {
-    public Dictionary<Type, CreateTableResult> Results { get; private set; }
-
-    public CreateTablesResult() {
-        Results = [];
-    }
+    public Dictionary<Type, CreateTableResult> Results { get; } = [];
 }
 
 public abstract class BaseTableQuery {
@@ -2922,9 +2913,8 @@ public abstract class BaseTableQuery {
 }
 
 public class TableQuery<T> : BaseTableQuery, IEnumerable<T> {
-    public SQLiteConnection Connection { get; private set; }
-
-    public TableMapping Table { get; private set; }
+    public SQLiteConnection Connection { get; }
+    public TableMapping Table { get; }
 
     private Expression? _where;
     private List<Ordering>? _orderBys;
@@ -3008,7 +2998,6 @@ public class TableQuery<T> : BaseTableQuery, IEnumerable<T> {
 
         List<object?> parameters = [];
         string commandText = $"delete from \"{Table.TableName}\" where {CompileExpression(predicate!, parameters).CommandText}";
-
         SQLiteCommand command = Connection.CreateCommand(commandText, parameters);
 
         int result = command.ExecuteNonQuery();
