@@ -130,15 +130,12 @@ public interface ISQLiteConnection : IDisposable {
     TableMapping GetMapping(Type type, CreateFlags createFlags = CreateFlags.None);
     TableMapping GetMapping<T>(CreateFlags createFlags = CreateFlags.None);
     List<SQLiteConnection.ColumnInfo> GetTableInfo(string tableName);
-    int Insert(object obj);
-    int Insert(object obj, Type objType);
-    int Insert(object obj, string modifier);
-    int InsertAll(object obj, string modifier, Type objType);
-    int InsertAll(IEnumerable objects, bool runInTransaction = true);
-    int InsertAll(IEnumerable objects, string modifier, bool runInTransaction = true);
-    int InsertAll(IEnumerable objects, Type objType, bool runInTransaction = true);
+    int Insert(object obj, string? modifier = null);
+    int InsertAll(IEnumerable objects, string? modifier = null, bool runInTransaction = true);
     int InsertOrReplace(object obj);
-    int InsertOrReplace(object obj, Type objType);
+    int InsertOrReplaceAll(IEnumerable objects, bool runInTransaction = true);
+    int InsertOrIgnore(object obj);
+    int InsertOrIgnoreAll(IEnumerable objects, bool runInTransaction = true);
     List<T> Query<T>(string query, params IEnumerable<object?> parameters) where T : new();
     List<object> Query(TableMapping map, string query, params IEnumerable<object?> parameters);
     List<T> QueryScalars<T>(string query, params IEnumerable<object?> parameters);
@@ -1254,197 +1251,16 @@ public partial class SQLiteConnection : ISQLiteConnection {
         }
     }
     /// <summary>
-    /// Inserts each object into the table.
+    /// Inserts the given object into the table, updating any auto-incremented primary keys.<br/>
+    /// The <paramref name="modifier"/> is literal SQL added after <c>INSERT</c> (e.g. <c>OR REPLACE</c>).
     /// </summary>
-    /// <returns>
-    /// The number of rows added to the table.
-    /// </returns>
-    public int InsertAll(IEnumerable objects, bool runInTransaction = true) {
-        int counter = 0;
-        if (runInTransaction) {
-            RunInTransaction(() => {
-                foreach (object obj in objects) {
-                    counter += Insert(obj);
-                }
-            });
-        }
-        else {
-            foreach (object obj in objects) {
-                counter += Insert(obj);
-            }
-        }
-        return counter;
-    }
-    /// <summary>
-    /// Inserts each object into the table. The <paramref name="modifier"/> is literal SQL added after "INSERT" (e.g. "OR REPLACE").
-    /// </summary>
-    /// <param name="modifier">
-    /// Literal SQL code that gets placed into the command. INSERT {extra} INTO ...
-    /// </param>
-    /// <returns>
-    /// The number of rows added to the table.
-    /// </returns>
-    public int InsertAll(IEnumerable objects, string modifier, bool runInTransaction = true) {
-        int counter = 0;
-        if (runInTransaction) {
-            RunInTransaction(() => {
-                foreach (object obj in objects) {
-                    counter += Insert(obj, modifier);
-                }
-            });
-        }
-        else {
-            foreach (object obj in objects) {
-                counter += Insert(obj, modifier);
-            }
-        }
-        return counter;
-    }
-    /// <summary>
-    /// Inserts all specified objects.
-    /// </summary>
-    /// <param name="objects">
-    /// An <see cref="IEnumerable"/> of the objects to insert.
-    /// </param>
-    /// <param name="objType">
-    /// The type of object to insert.
-    /// </param>
-    /// <param name="runInTransaction">
-    /// A boolean indicating if the inserts should be wrapped in a transaction.
-    /// </param>
-    /// <returns>
-    /// The number of rows added to the table.
-    /// </returns>
-    public int InsertAll(IEnumerable objects, Type objType, bool runInTransaction = true) {
-        int counter = 0;
-        if (runInTransaction) {
-            RunInTransaction(() => {
-                foreach (object obj in objects) {
-                    counter += Insert(obj, objType);
-                }
-            });
-        }
-        else {
-            foreach (object obj in objects) {
-                counter += Insert(obj, objType);
-            }
-        }
-        return counter;
-    }
-    /// <summary>
-    /// Inserts the given object (and updates its
-    /// auto incremented primary key if it has one).
-    /// The return value is the number of rows added to the table.
-    /// </summary>
-    /// <param name="obj">
-    /// The object to insert.
-    /// </param>
-    /// <returns>
-    /// The number of rows added to the table.
-    /// </returns>
-    public int Insert(object obj) {
+    /// <returns>The number of rows added.</returns>
+    public int Insert(object obj, string? modifier = null) {
         if (obj is null) {
-            return 0;
-        }
-        return InsertAll(obj, "", obj.GetType());
-    }
-    /// <summary>
-    /// Inserts the given object (and updates its
-    /// auto incremented primary key if it has one).
-    /// The return value is the number of rows added to the table.
-    /// If a UNIQUE constraint violation occurs with
-    /// some pre-existing object, this function deletes
-    /// the old object.
-    /// </summary>
-    /// <param name="obj">
-    /// The object to insert.
-    /// </param>
-    /// <returns>
-    /// The number of rows modified.
-    /// </returns>
-    public int InsertOrReplace(object obj) {
-        if (obj is null) {
-            return 0;
-        }
-        return InsertAll(obj, "OR REPLACE", obj.GetType());
-    }
-    /// <summary>
-    /// Inserts the given object (and updates its
-    /// auto incremented primary key if it has one).
-    /// The return value is the number of rows added to the table.
-    /// </summary>
-    /// <param name="obj">
-    /// The object to insert.
-    /// </param>
-    /// <param name="objType">
-    /// The type of object to insert.
-    /// </param>
-    /// <returns>
-    /// The number of rows added to the table.
-    /// </returns>
-    public int Insert(object obj, Type objType) {
-        return InsertAll(obj, "", objType);
-    }
-    /// <summary>
-    /// Inserts the given object (and updates its
-    /// auto incremented primary key if it has one).
-    /// The return value is the number of rows added to the table.
-    /// If a UNIQUE constraint violation occurs with
-    /// some pre-existing object, this function deletes
-    /// the old object.
-    /// </summary>
-    /// <param name="obj">
-    /// The object to insert.
-    /// </param>
-    /// <param name="objType">
-    /// The type of object to insert.
-    /// </param>
-    /// <returns>
-    /// The number of rows modified.
-    /// </returns>
-    public int InsertOrReplace(object obj, Type objType) {
-        return InsertAll(obj, "OR REPLACE", objType);
-    }
-    /// <summary>
-    /// Inserts the given object (and updates its
-    /// auto incremented primary key if it has one).
-    /// The return value is the number of rows added to the table.
-    /// </summary>
-    /// <param name="obj">
-    /// The object to insert.
-    /// </param>
-    /// <param name="modifier">
-    /// Literal SQL code that gets placed into the command. INSERT {extra} INTO ...
-    /// </param>
-    /// <returns>
-    /// The number of rows added to the table.
-    /// </returns>
-    public int Insert(object obj, string modifier) {
-        return InsertAll(obj, modifier, obj.GetType());
-    }
-    /// <summary>
-    /// Inserts the given object (and updates its
-    /// auto incremented primary key if it has one).
-    /// The return value is the number of rows added to the table.
-    /// </summary>
-    /// <param name="obj">
-    /// The object to insert.
-    /// </param>
-    /// <param name="modifier">
-    /// Literal SQL code that gets placed into the command. INSERT {extra} INTO ...
-    /// </param>
-    /// <param name="objType">
-    /// The type of object to insert.
-    /// </param>
-    /// <returns>
-    /// The number of rows added to the table.
-    /// </returns>
-    public int InsertAll(object obj, string? modifier, Type objType) {
-        if (obj is null || objType is null) {
             return 0;
         }
 
-        TableMapping map = GetMapping(objType);
+        TableMapping map = GetMapping(obj.GetType());
 
         if (map.PrimaryKey is not null && map.PrimaryKey.IsAutoGuid) {
             if (Equals(map.PrimaryKey.GetValue(obj), Guid.Empty)) {
@@ -1452,21 +1268,18 @@ public partial class SQLiteConnection : ISQLiteConnection {
             }
         }
 
-        bool replacing = string.Equals(modifier, "OR REPLACE", StringComparison.OrdinalIgnoreCase);
-
-        TableMapping.Column[] columns = replacing ? map.InsertOrReplaceColumns : map.InsertColumns;
-        object?[] values = new object[columns.Length];
+        object?[] values = new object[map.Columns.Length];
         for (int i = 0; i < values.Length; i++) {
-            values[i] = columns[i].GetValue(obj);
+            values[i] = map.Columns[i].GetValue(obj);
         }
 
         string query;
-        if (columns.Length == 0 && map.Columns.Length == 1 && map.Columns[0].IsAutoIncrement) {
+        if (map.Columns.Length == 0) {
             query = $"insert {modifier} into \"{map.TableName}\" default values";
         }
         else {
-            string columnsSql = string.Join(",", columns.Select(column => "\"" + column.Name + "\""));
-            string valuesSql = string.Join(",", columns.Select(column => "?"));
+            string columnsSql = string.Join(",", map.Columns.Select(column => "\"" + column.Name + "\""));
+            string valuesSql = string.Join(",", map.Columns.Select(column => "?"));
             query = $"insert {modifier} into \"{map.TableName}\"({columnsSql}) values ({valuesSql})";
         }
 
@@ -1492,7 +1305,95 @@ public partial class SQLiteConnection : ISQLiteConnection {
 
         return rowCount;
     }
-
+    /// <summary>
+    /// Inserts each object into the table, updating any auto-incremented primary keys.<br/>
+    /// The <paramref name="modifier"/> is literal SQL added after <c>INSERT</c> (e.g. <c>OR REPLACE</c>).
+    /// </summary>
+    /// <returns>The number of rows added.</returns>
+    public int InsertAll(IEnumerable objects, string? modifier = null, bool runInTransaction = true) {
+        int counter = 0;
+        if (runInTransaction) {
+            RunInTransaction(() => {
+                foreach (object obj in objects) {
+                    counter += Insert(obj, modifier);
+                }
+            });
+        }
+        else {
+            foreach (object obj in objects) {
+                counter += Insert(obj, modifier);
+            }
+        }
+        return counter;
+    }
+    /// <summary>
+    /// Inserts the given object into the table, updating any auto-incremented primary keys.<br/>
+    /// The <paramref name="modifier"/> is literal SQL added after <c>INSERT</c> (e.g. <c>OR REPLACE</c>).
+    /// </summary>
+    /// <remarks>
+    /// If a UNIQUE constraint violation occurs, the old object is replaced.
+    /// </remarks>
+    /// <returns>The number of rows added/modified.</returns>
+    public int InsertOrReplace(object obj) {
+        return Insert(obj, "OR REPLACE");
+    }
+    /// <summary>
+    /// Inserts each object into the table, updating any auto-incremented primary keys.<br/>
+    /// </summary>
+    /// <remarks>
+    /// If a UNIQUE constraint violation occurs, the old object is replaced.
+    /// </remarks>
+    /// <returns>The number of rows added/modified.</returns>
+    public int InsertOrReplaceAll(IEnumerable objects, bool runInTransaction = true) {
+        int counter = 0;
+        if (runInTransaction) {
+            RunInTransaction(() => {
+                foreach (object obj in objects) {
+                    counter += InsertOrReplace(obj);
+                }
+            });
+        }
+        else {
+            foreach (object obj in objects) {
+                counter += InsertOrReplace(obj);
+            }
+        }
+        return counter;
+    }
+    /// <summary>
+    /// Inserts the given object into the table, updating any auto-incremented primary keys.<br/>
+    /// The <paramref name="modifier"/> is literal SQL added after <c>INSERT</c> (e.g. <c>OR REPLACE</c>).
+    /// </summary>
+    /// <remarks>
+    /// If a UNIQUE constraint violation occurs, the new object is not inserted.
+    /// </remarks>
+    /// <returns>The number of rows modified.</returns>
+    public int InsertOrIgnore(object obj) {
+        return Insert(obj, "OR IGNORE");
+    }
+    /// <summary>
+    /// Inserts each object into the table, updating any auto-incremented primary keys.<br/>
+    /// </summary>
+    /// <remarks>
+    /// If a UNIQUE constraint violation occurs, the new object is not inserted.
+    /// </remarks>
+    /// <returns>The number of rows added/modified.</returns>
+    public int InsertOrIgnoreAll(IEnumerable objects, bool runInTransaction = true) {
+        int counter = 0;
+        if (runInTransaction) {
+            RunInTransaction(() => {
+                foreach (object obj in objects) {
+                    counter += InsertOrIgnore(obj);
+                }
+            });
+        }
+        else {
+            foreach (object obj in objects) {
+                counter += InsertOrIgnore(obj);
+            }
+        }
+        return counter;
+    }
     /// <summary>
     /// Updates all of the columns of a table using the specified object
     /// except for its primary key.
@@ -1935,8 +1836,6 @@ public class TableMapping {
     internal MapMethod Method { get; } = MapMethod.ByName;
 
     private readonly Column? _autoIncrementedPrimaryKey;
-    private readonly Column[] _insertColumns;
-    private readonly Column[] _insertOrReplaceColumns;
 
     public TableMapping(Type type, CreateFlags createFlags = CreateFlags.None) {
         MappedType = type;
@@ -1972,21 +1871,11 @@ public class TableMapping {
             // People should not be calling Get/Find without a primary key
             GetByPrimaryKeySql = $"select * from \"{TableName}\" limit 1";
         }
-
-        _insertColumns = [.. Columns.Where(c => !c.IsAutoIncrement)];
-        _insertOrReplaceColumns = [.. Columns];
     }
 
     public bool HasAutoIncrementedPrimaryKey => _autoIncrementedPrimaryKey is not null;
     public void SetAutoIncrementedPrimaryKey(object obj, long id) {
         _autoIncrementedPrimaryKey?.SetValue(obj, Convert.ChangeType(id, _autoIncrementedPrimaryKey.ColumnType));
-    }
-
-    public Column[] InsertColumns {
-        get => _insertColumns;
-    }
-    public Column[] InsertOrReplaceColumns {
-        get => _insertOrReplaceColumns;
     }
 
     public Column? FindColumnWithPropertyName(string propertyName) {

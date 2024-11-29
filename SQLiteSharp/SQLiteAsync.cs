@@ -48,15 +48,12 @@ public interface ISQLiteAsyncConnection {
     Task<TableMapping> GetMappingAsync(Type type, CreateFlags createFlags = CreateFlags.None);
     Task<TableMapping> GetMappingAsync<T>(CreateFlags createFlags = CreateFlags.None) where T : new();
     Task<List<SQLiteConnection.ColumnInfo>> GetTableInfoAsync(string tableName);
-    Task<int> InsertAllAsync(IEnumerable objects, bool runInTransaction = true);
-    Task<int> InsertAllAsync(IEnumerable objects, string modifier, bool runInTransaction = true);
-    Task<int> InsertAllAsync(IEnumerable objects, Type objType, bool runInTransaction = true);
-    Task<int> InsertAsync(object obj);
-    Task<int> InsertAsync(object obj, Type objType);
-    Task<int> InsertAsync(object obj, string modifier);
-    Task<int> InsertAsync(object obj, string modifier, Type objType);
+    Task<int> InsertAsync(object obj, string? modifier = null);
+    Task<int> InsertAllAsync(IEnumerable objects, string? modifier = null, bool runInTransaction = true);
     Task<int> InsertOrReplaceAsync(object obj);
-    Task<int> InsertOrReplaceAsync(object obj, Type objType);
+    Task<int> InsertOrReplaceAllAsync(IEnumerable objects, bool runInTransaction = true);
+    Task<int> InsertOrIgnoreAsync(object obj);
+    Task<int> InsertOrIgnoreAllAsync(IEnumerable objects, bool runInTransaction = true);
     Task<List<T>> QueryAsync<T>(string query, params IEnumerable<object?> parameters) where T : new();
     Task<List<object>> QueryAsync(TableMapping map, string query, params IEnumerable<object?> parameters);
     Task<List<T>> QueryScalarsAsync<T>(string query, params IEnumerable<object?> parameters);
@@ -325,114 +322,29 @@ public partial class SQLiteAsyncConnection : ISQLiteAsyncConnection {
         return LockAsync(connection => connection.CreateIndex(property, unique));
     }
 
-    /// <summary>
-    /// Inserts the given object and (and updates its
-    /// auto incremented primary key if it has one).
-    /// </summary>
-    /// <param name="obj">
-    /// The object to insert.
-    /// </param>
-    /// <returns>
-    /// The number of rows added to the table.
-    /// </returns>
-    public Task<int> InsertAsync(object obj) {
-        return LockAsync(connection => connection.Insert(obj));
-    }
-
-    /// <summary>
-    /// Inserts the given object (and updates its
-    /// auto incremented primary key if it has one).
-    /// The return value is the number of rows added to the table.
-    /// </summary>
-    /// <param name="obj">
-    /// The object to insert.
-    /// </param>
-    /// <param name="objType">
-    /// The type of object to insert.
-    /// </param>
-    /// <returns>
-    /// The number of rows added to the table.
-    /// </returns>
-    public Task<int> InsertAsync(object obj, Type objType) {
-        return LockAsync(connection => connection.Insert(obj, objType));
-    }
-
-    /// <summary>
-    /// Inserts the given object (and updates its
-    /// auto incremented primary key if it has one).
-    /// The return value is the number of rows added to the table.
-    /// </summary>
-    /// <param name="obj">
-    /// The object to insert.
-    /// </param>
-    /// <param name="extra">
-    /// Literal SQL code that gets placed into the command. INSERT {extra} INTO ...
-    /// </param>
-    /// <returns>
-    /// The number of rows added to the table.
-    /// </returns>
-    public Task<int> InsertAsync(object obj, string modifier) {
+    /// <inheritdoc cref="SQLiteConnection.Insert(object, string?)"/>
+    public Task<int> InsertAsync(object obj, string? modifier = null) {
         return LockAsync(connection => connection.Insert(obj, modifier));
     }
-
-    /// <summary>
-    /// Inserts the given object (and updates its
-    /// auto incremented primary key if it has one).
-    /// The return value is the number of rows added to the table.
-    /// </summary>
-    /// <param name="obj">
-    /// The object to insert.
-    /// </param>
-    /// <param name="extra">
-    /// Literal SQL code that gets placed into the command. INSERT {extra} INTO ...
-    /// </param>
-    /// <param name="objType">
-    /// The type of object to insert.
-    /// </param>
-    /// <returns>
-    /// The number of rows added to the table.
-    /// </returns>
-    public Task<int> InsertAsync(object obj, string modifier, Type objType) {
-        return LockAsync(connection => connection.InsertAll(obj, modifier, objType));
+    /// <inheritdoc cref="SQLiteConnection.InsertAll(IEnumerable, string?, bool)"/>
+    public Task<int> InsertAllAsync(IEnumerable objects, string? modifier = null, bool runInTransaction = true) {
+        return LockAsync(connection => connection.InsertAll(objects, modifier, runInTransaction));
     }
-
-    /// <summary>
-    /// Inserts the given object (and updates its
-    /// auto incremented primary key if it has one).
-    /// The return value is the number of rows added to the table.
-    /// If a UNIQUE constraint violation occurs with
-    /// some pre-existing object, this function deletes
-    /// the old object.
-    /// </summary>
-    /// <param name="obj">
-    /// The object to insert.
-    /// </param>
-    /// <returns>
-    /// The number of rows modified.
-    /// </returns>
+    /// <inheritdoc cref="SQLiteConnection.InsertOrReplace(object)"/>
     public Task<int> InsertOrReplaceAsync(object obj) {
         return LockAsync(connection => connection.InsertOrReplace(obj));
     }
-
-    /// <summary>
-    /// Inserts the given object (and updates its
-    /// auto incremented primary key if it has one).
-    /// The return value is the number of rows added to the table.
-    /// If a UNIQUE constraint violation occurs with
-    /// some pre-existing object, this function deletes
-    /// the old object.
-    /// </summary>
-    /// <param name="obj">
-    /// The object to insert.
-    /// </param>
-    /// <param name="objType">
-    /// The type of object to insert.
-    /// </param>
-    /// <returns>
-    /// The number of rows modified.
-    /// </returns>
-    public Task<int> InsertOrReplaceAsync(object obj, Type objType) {
-        return LockAsync(connection => connection.InsertOrReplace(obj, objType));
+    /// <inheritdoc cref="SQLiteConnection.InsertOrReplaceAll(IEnumerable, bool)"/>
+    public Task<int> InsertOrReplaceAllAsync(IEnumerable objects, bool runInTransaction = true) {
+        return LockAsync(connection => connection.InsertOrReplaceAll(objects));
+    }
+    /// <inheritdoc cref="SQLiteConnection.InsertOrIgnore(object)"/>
+    public Task<int> InsertOrIgnoreAsync(object obj) {
+        return LockAsync(connection => connection.InsertOrIgnore(obj));
+    }
+    /// <inheritdoc cref="SQLiteConnection.InsertOrIgnoreAll(IEnumerable, bool)"/>
+    public Task<int> InsertOrIgnoreAllAsync(IEnumerable objects, bool runInTransaction = true) {
+        return LockAsync(connection => connection.InsertOrIgnoreAll(objects));
     }
 
     /// <summary>
