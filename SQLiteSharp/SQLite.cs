@@ -1,9 +1,8 @@
 using System.Collections;
-using System.Collections.Concurrent;
+using System.Text;
 using System.Diagnostics;
 using System.Linq.Expressions;
 using System.Reflection;
-using System.Text;
 
 using Sqlite3 = SQLitePCL.raw;
 using Sqlite3BackupHandle = SQLitePCL.sqlite3_backup;
@@ -133,10 +132,10 @@ public interface ISQLiteConnection : IDisposable {
     List<SQLiteConnection.ColumnInfo> GetTableInfo(string tableName);
     int Insert(object obj);
     int Insert(object obj, Type objType);
-    int Insert(object obj, string extra);
-    int Insert(object obj, string extra, Type objType);
+    int Insert(object obj, string modifier);
+    int InsertAll(object obj, string modifier, Type objType);
     int InsertAll(IEnumerable objects, bool runInTransaction = true);
-    int InsertAll(IEnumerable objects, string extra, bool runInTransaction = true);
+    int InsertAll(IEnumerable objects, string modifier, bool runInTransaction = true);
     int InsertAll(IEnumerable objects, Type objType, bool runInTransaction = true);
     int InsertOrReplace(object obj);
     int InsertOrReplace(object obj, Type objType);
@@ -1255,13 +1254,8 @@ public partial class SQLiteConnection : ISQLiteConnection {
         }
     }
     /// <summary>
-    /// Inserts all specified objects.
+    /// Inserts each object into the table.
     /// </summary>
-    /// <param name="objects">
-    /// An <see cref="IEnumerable"/> of the objects to insert.
-    /// <param name="runInTransaction"/>
-    /// A boolean indicating if the inserts should be wrapped in a transaction.
-    /// </param>
     /// <returns>
     /// The number of rows added to the table.
     /// </returns>
@@ -1282,32 +1276,26 @@ public partial class SQLiteConnection : ISQLiteConnection {
         return counter;
     }
     /// <summary>
-    /// Inserts all specified objects.
+    /// Inserts each object into the table. The <paramref name="modifier"/> is literal SQL added after "INSERT" (e.g. "OR REPLACE").
     /// </summary>
-    /// <param name="objects">
-    /// An <see cref="IEnumerable"/> of the objects to insert.
-    /// </param>
-    /// <param name="extra">
+    /// <param name="modifier">
     /// Literal SQL code that gets placed into the command. INSERT {extra} INTO ...
-    /// </param>
-    /// <param name="runInTransaction">
-    /// A boolean indicating if the inserts should be wrapped in a transaction.
     /// </param>
     /// <returns>
     /// The number of rows added to the table.
     /// </returns>
-    public int InsertAll(IEnumerable objects, string extra, bool runInTransaction = true) {
+    public int InsertAll(IEnumerable objects, string modifier, bool runInTransaction = true) {
         int counter = 0;
         if (runInTransaction) {
             RunInTransaction(() => {
                 foreach (object obj in objects) {
-                    counter += Insert(obj, extra);
+                    counter += Insert(obj, modifier);
                 }
             });
         }
         else {
             foreach (object obj in objects) {
-                counter += Insert(obj, extra);
+                counter += Insert(obj, modifier);
             }
         }
         return counter;
@@ -1358,7 +1346,7 @@ public partial class SQLiteConnection : ISQLiteConnection {
         if (obj is null) {
             return 0;
         }
-        return Insert(obj, "", obj.GetType());
+        return InsertAll(obj, "", obj.GetType());
     }
     /// <summary>
     /// Inserts the given object (and updates its
@@ -1378,7 +1366,7 @@ public partial class SQLiteConnection : ISQLiteConnection {
         if (obj is null) {
             return 0;
         }
-        return Insert(obj, "OR REPLACE", obj.GetType());
+        return InsertAll(obj, "OR REPLACE", obj.GetType());
     }
     /// <summary>
     /// Inserts the given object (and updates its
@@ -1395,7 +1383,7 @@ public partial class SQLiteConnection : ISQLiteConnection {
     /// The number of rows added to the table.
     /// </returns>
     public int Insert(object obj, Type objType) {
-        return Insert(obj, "", objType);
+        return InsertAll(obj, "", objType);
     }
     /// <summary>
     /// Inserts the given object (and updates its
@@ -1415,7 +1403,7 @@ public partial class SQLiteConnection : ISQLiteConnection {
     /// The number of rows modified.
     /// </returns>
     public int InsertOrReplace(object obj, Type objType) {
-        return Insert(obj, "OR REPLACE", objType);
+        return InsertAll(obj, "OR REPLACE", objType);
     }
     /// <summary>
     /// Inserts the given object (and updates its
@@ -1425,14 +1413,14 @@ public partial class SQLiteConnection : ISQLiteConnection {
     /// <param name="obj">
     /// The object to insert.
     /// </param>
-    /// <param name="extra">
+    /// <param name="modifier">
     /// Literal SQL code that gets placed into the command. INSERT {extra} INTO ...
     /// </param>
     /// <returns>
     /// The number of rows added to the table.
     /// </returns>
-    public int Insert(object obj, string extra) {
-        return Insert(obj, extra, obj.GetType());
+    public int Insert(object obj, string modifier) {
+        return InsertAll(obj, modifier, obj.GetType());
     }
     /// <summary>
     /// Inserts the given object (and updates its
@@ -1442,7 +1430,7 @@ public partial class SQLiteConnection : ISQLiteConnection {
     /// <param name="obj">
     /// The object to insert.
     /// </param>
-    /// <param name="extra">
+    /// <param name="modifier">
     /// Literal SQL code that gets placed into the command. INSERT {extra} INTO ...
     /// </param>
     /// <param name="objType">
@@ -1451,7 +1439,7 @@ public partial class SQLiteConnection : ISQLiteConnection {
     /// <returns>
     /// The number of rows added to the table.
     /// </returns>
-    public int Insert(object obj, string extra, Type objType) {
+    public int InsertAll(object obj, string? modifier, Type objType) {
         if (obj is null || objType is null) {
             return 0;
         }
@@ -1464,7 +1452,7 @@ public partial class SQLiteConnection : ISQLiteConnection {
             }
         }
 
-        bool replacing = string.Equals(extra, "OR REPLACE", StringComparison.OrdinalIgnoreCase);
+        bool replacing = string.Equals(modifier, "OR REPLACE", StringComparison.OrdinalIgnoreCase);
 
         TableMapping.Column[] columns = replacing ? map.InsertOrReplaceColumns : map.InsertColumns;
         object?[] values = new object[columns.Length];
@@ -1472,61 +1460,37 @@ public partial class SQLiteConnection : ISQLiteConnection {
             values[i] = columns[i].GetValue(obj);
         }
 
-        PreparedSqlLiteInsertCommand insertCommand = GetInsertCommand(map, extra);
-        int count;
-
-        lock (insertCommand) {
-            // We lock here to protect the prepared statement returned via GetInsertCommand.
-            // A SQLite prepared statement can be bound for only one operation at a time.
-            try {
-                count = insertCommand.ExecuteNonQuery(values);
-            }
-            catch (SQLiteException ex) {
-                if (SQLite3.ExtendedErrCode(Handle!) is SQLite3.ExtendedResult.ConstraintNotNull) {
-                    throw new NotNullConstraintViolationException(ex.Result, ex.Message, map, obj);
-                }
-                throw;
-            }
-
-            if (map.HasAutoIncrementedPrimaryKey) {
-                long id = SQLite3.LastInsertRowid(Handle!);
-                map.SetAutoIncrementedPrimaryKey(obj, id);
-            }
-        }
-        if (count > 0) {
-            OnTableChanged(map, NotifyTableChangedAction.Insert);
-        }
-
-        return count;
-    }
-
-    private readonly ConcurrentDictionary<(string, string), PreparedSqlLiteInsertCommand> _insertCommandMap = [];
-
-    PreparedSqlLiteInsertCommand GetInsertCommand(TableMapping map, string extra) {
-        (string, string) key = (map.MappedType.FullName!, extra);
-
-        return _insertCommandMap.GetOrAdd(key, key => CreateInsertCommand(map, extra));
-    }
-
-    PreparedSqlLiteInsertCommand CreateInsertCommand(TableMapping map, string extra) {
-        TableMapping.Column[] columns = map.InsertColumns;
-        string insertSql;
+        string query;
         if (columns.Length == 0 && map.Columns.Length == 1 && map.Columns[0].IsAutoIncrement) {
-            insertSql = $"insert {extra} into \"{map.TableName}\" default values";
+            query = $"insert {modifier} into \"{map.TableName}\" default values";
         }
         else {
-            bool replacing = string.Equals(extra, "OR REPLACE", StringComparison.OrdinalIgnoreCase);
-
-            if (replacing) {
-                columns = map.InsertOrReplaceColumns;
-            }
-
             string columnsSql = string.Join(",", columns.Select(column => "\"" + column.Name + "\""));
             string valuesSql = string.Join(",", columns.Select(column => "?"));
-            insertSql = $"insert {extra} into \"{map.TableName}\"({columnsSql}) values ({valuesSql})";
+            query = $"insert {modifier} into \"{map.TableName}\"({columnsSql}) values ({valuesSql})";
         }
 
-        return new PreparedSqlLiteInsertCommand(this, insertSql);
+        int rowCount = 0;
+        try {
+            rowCount = Execute(query, values);
+        }
+        catch (SQLiteException ex) {
+            if (ex.Result is SQLite3.Result.Constraint && SQLite3.ExtendedErrCode(Handle!) is SQLite3.ExtendedResult.ConstraintNotNull) {
+                throw new NotNullConstraintViolationException(ex, map, obj);
+            }
+            throw;
+        }
+
+        if (map.HasAutoIncrementedPrimaryKey) {
+            long id = SQLite3.LastInsertRowid(Handle!);
+            map.SetAutoIncrementedPrimaryKey(obj, id);
+        }
+
+        if (rowCount > 0) {
+            OnTableChanged(map, NotifyTableChangedAction.Update);
+        }
+
+        return rowCount;
     }
 
     /// <summary>
@@ -1541,7 +1505,7 @@ public partial class SQLiteConnection : ISQLiteConnection {
     /// The number of rows updated.
     /// </returns>
     public int Update(object obj) {
-        if (obj == null) {
+        if (obj is null) {
             return 0;
         }
         return Update(obj, obj.GetType());
@@ -1562,8 +1526,7 @@ public partial class SQLiteConnection : ISQLiteConnection {
     /// The number of rows updated.
     /// </returns>
     public int Update(object obj, Type objType) {
-        int rowsAffected = 0;
-        if (obj == null || objType == null) {
+        if (obj is null || objType is null) {
             return 0;
         }
 
@@ -1585,22 +1548,22 @@ public partial class SQLiteConnection : ISQLiteConnection {
         parameters.Add(primaryKey.GetValue(obj));
         string query = $"update \"{map.TableName}\" set {string.Join(",", columns.Select(column => $"\"{column.Name}\" = ? "))} where \"{primaryKey.Name}\" = ?";
 
+        int rowCount = 0;
         try {
-            rowsAffected = Execute(query, parameters);
+            rowCount = Execute(query, parameters);
         }
         catch (SQLiteException ex) {
-            if (ex.Result == SQLite3.Result.Constraint && SQLite3.ExtendedErrCode(Handle!) == SQLite3.ExtendedResult.ConstraintNotNull) {
+            if (ex.Result is SQLite3.Result.Constraint && SQLite3.ExtendedErrCode(Handle!) is SQLite3.ExtendedResult.ConstraintNotNull) {
                 throw new NotNullConstraintViolationException(ex, map, obj);
             }
-
             throw;
         }
 
-        if (rowsAffected > 0) {
+        if (rowCount > 0) {
             OnTableChanged(map, NotifyTableChangedAction.Update);
         }
 
-        return rowsAffected;
+        return rowCount;
     }
 
     /// <summary>
@@ -1781,13 +1744,6 @@ public partial class SQLiteConnection : ISQLiteConnection {
         if (_open && Handle is not null) {
             try {
                 if (disposing) {
-                    lock (_insertCommandMap) {
-                        foreach (var sqlInsertCommand in _insertCommandMap.Values) {
-                            sqlInsertCommand.Dispose();
-                        }
-                        _insertCommandMap.Clear();
-                    }
-
                     SQLite3.Result result = useClose2 ? SQLite3.Close2(Handle) : SQLite3.Close(Handle);
                     if (result != SQLite3.Result.OK) {
                         string msg = SQLite3.GetErrmsg(Handle);
@@ -2213,17 +2169,11 @@ public static class Orm {
     }
 }
 
-public partial class SQLiteCommand {
-    private readonly SQLiteConnection _conn;
-    private readonly List<Binding> _bindings;
+public partial class SQLiteCommand(SQLiteConnection conn) {
+    private readonly SQLiteConnection _conn = conn;
+    private readonly List<Binding> _bindings = [];
 
-    public string CommandText { get; set; }
-
-    public SQLiteCommand(SQLiteConnection conn) {
-        _conn = conn;
-        _bindings = [];
-        CommandText = "";
-    }
+    public string CommandText { get; set; } = "";
 
     public int ExecuteNonQuery() {
         if (_conn.Trace) {
@@ -2233,20 +2183,20 @@ public partial class SQLiteCommand {
         Sqlite3Statement statement = Prepare();
         SQLite3.Result result = SQLite3.Step(statement);
         SQLite3.Finalize(statement);
-        if (result == SQLite3.Result.Done) {
-            int rowsAffected = SQLite3.Changes(_conn.Handle!);
-            return rowsAffected;
+
+        if (result is SQLite3.Result.Done) {
+            int rowCount = SQLite3.Changes(_conn.Handle!);
+            return rowCount;
         }
-        else if (result == SQLite3.Result.Error) {
+        else if (result is SQLite3.Result.Error) {
             string msg = SQLite3.GetErrmsg(_conn.Handle!);
             throw new SQLiteException(result, msg);
         }
-        else if (result == SQLite3.Result.Constraint) {
-            if (SQLite3.ExtendedErrCode(_conn.Handle!) == SQLite3.ExtendedResult.ConstraintNotNull) {
+        else if (result is SQLite3.Result.Constraint) {
+            if (SQLite3.ExtendedErrCode(_conn.Handle!) is SQLite3.ExtendedResult.ConstraintNotNull) {
                 throw new NotNullConstraintViolationException(result, SQLite3.GetErrmsg(_conn.Handle!));
             }
         }
-
         throw new SQLiteException(result, SQLite3.GetErrmsg(_conn.Handle!));
     }
 
@@ -2780,79 +2730,6 @@ internal class FastColumnSetter {
                 setProperty.Invoke((ObjectType)obj, getColumnValue.Invoke(stmt, i));
             }
         };
-    }
-}
-
-/// <summary>
-/// Since the insert never changed, we only need to prepare once.
-/// </summary>
-class PreparedSqlLiteInsertCommand(SQLiteConnection connection, string commandText) : IDisposable {
-    private bool Initialized;
-    private Sqlite3Statement? Statement;
-
-    private readonly string CommandText = commandText;
-    private SQLiteConnection? Connection = connection;
-
-    public int ExecuteNonQuery(object?[] source) {
-        if (Initialized && Statement is null) {
-            throw new ObjectDisposedException(nameof(PreparedSqlLiteInsertCommand));
-        }
-
-        if (Connection!.Trace) {
-            Connection.Tracer?.Invoke("Executing: " + CommandText);
-        }
-
-        SQLite3.Result result = SQLite3.Result.OK;
-
-        if (!Initialized) {
-            Statement = SQLite3.Prepare2(Connection.Handle!, CommandText);
-            Initialized = true;
-        }
-
-        // Bind the values.
-        if (source is not null) {
-            for (int i = 0; i < source.Length; i++) {
-                SQLiteCommand.BindParameter(Statement!, i + 1, source[i]);
-            }
-        }
-        result = SQLite3.Step(Statement!);
-
-        if (result is SQLite3.Result.Done) {
-            int rowsAffected = SQLite3.Changes(Connection.Handle!);
-            SQLite3.Reset(Statement!);
-            return rowsAffected;
-        }
-        else if (result is SQLite3.Result.Error) {
-            string msg = SQLite3.GetErrmsg(Connection.Handle!);
-            SQLite3.Reset(Statement!);
-            throw new SQLiteException(result, msg);
-        }
-        else if (result is SQLite3.Result.Constraint && SQLite3.ExtendedErrCode(Connection.Handle!) == SQLite3.ExtendedResult.ConstraintNotNull) {
-            SQLite3.Reset(Statement!);
-            throw new NotNullConstraintViolationException(result, SQLite3.GetErrmsg(Connection.Handle!));
-        }
-        else {
-            SQLite3.Reset(Statement!);
-            throw new SQLiteException(result, SQLite3.GetErrmsg(Connection.Handle!));
-        }
-    }
-
-    public void Dispose() {
-        Dispose(true);
-        GC.SuppressFinalize(this);
-    }
-
-    private void Dispose(bool disposing) {
-        Sqlite3Statement? statement = Statement;
-        Statement = null;
-        Connection = null;
-        if (statement is not null) {
-            SQLite3.Finalize(statement);
-        }
-    }
-
-    ~PreparedSqlLiteInsertCommand() {
-        Dispose(false);
     }
 }
 

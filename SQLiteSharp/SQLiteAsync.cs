@@ -49,12 +49,12 @@ public interface ISQLiteAsyncConnection {
     Task<TableMapping> GetMappingAsync<T>(CreateFlags createFlags = CreateFlags.None) where T : new();
     Task<List<SQLiteConnection.ColumnInfo>> GetTableInfoAsync(string tableName);
     Task<int> InsertAllAsync(IEnumerable objects, bool runInTransaction = true);
-    Task<int> InsertAllAsync(IEnumerable objects, string extra, bool runInTransaction = true);
+    Task<int> InsertAllAsync(IEnumerable objects, string modifier, bool runInTransaction = true);
     Task<int> InsertAllAsync(IEnumerable objects, Type objType, bool runInTransaction = true);
     Task<int> InsertAsync(object obj);
     Task<int> InsertAsync(object obj, Type objType);
-    Task<int> InsertAsync(object obj, string extra);
-    Task<int> InsertAsync(object obj, string extra, Type objType);
+    Task<int> InsertAsync(object obj, string modifier);
+    Task<int> InsertAsync(object obj, string modifier, Type objType);
     Task<int> InsertOrReplaceAsync(object obj);
     Task<int> InsertOrReplaceAsync(object obj, Type objType);
     Task<List<T>> QueryAsync<T>(string query, params IEnumerable<object?> parameters) where T : new();
@@ -371,8 +371,8 @@ public partial class SQLiteAsyncConnection : ISQLiteAsyncConnection {
     /// <returns>
     /// The number of rows added to the table.
     /// </returns>
-    public Task<int> InsertAsync(object obj, string extra) {
-        return LockAsync(connection => connection.Insert(obj, extra));
+    public Task<int> InsertAsync(object obj, string modifier) {
+        return LockAsync(connection => connection.Insert(obj, modifier));
     }
 
     /// <summary>
@@ -392,8 +392,8 @@ public partial class SQLiteAsyncConnection : ISQLiteAsyncConnection {
     /// <returns>
     /// The number of rows added to the table.
     /// </returns>
-    public Task<int> InsertAsync(object obj, string extra, Type objType) {
-        return LockAsync(connection => connection.Insert(obj, extra, objType));
+    public Task<int> InsertAsync(object obj, string modifier, Type objType) {
+        return LockAsync(connection => connection.InsertAll(obj, modifier, objType));
     }
 
     /// <summary>
@@ -801,8 +801,8 @@ public partial class SQLiteAsyncConnection : ISQLiteAsyncConnection {
     /// <returns>
     /// The number of rows added to the table.
     /// </returns>
-    public Task<int> InsertAllAsync(IEnumerable objects, string extra, bool runInTransaction = true) {
-        return LockAsync(connection => connection.InsertAll(objects, extra, runInTransaction));
+    public Task<int> InsertAllAsync(IEnumerable objects, string modifier, bool runInTransaction = true) {
+        return LockAsync(connection => connection.InsertAll(objects, modifier, runInTransaction));
     }
 
     /// <summary>
