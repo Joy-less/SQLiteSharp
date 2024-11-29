@@ -1,6 +1,6 @@
 ﻿namespace SQLiteSharp.Tests;
 
-public class UnitTest1 {
+public class ReadMeTest {
     [Fact]
     public void Test1() {
         // Open a database connection
