@@ -99,6 +99,7 @@ public partial class SQLiteAsyncConnection : ISQLiteAsyncConnection {
 
     /// <inheritdoc cref="SQLiteConnection.DatabasePath"/>
     public string DatabasePath => GetConnection().DatabasePath;
+
     /// <inheritdoc cref="SQLiteConnection.SQLiteVersionNumber"/>
     public int SQLiteVersionNumber => GetConnection().SQLiteVersionNumber;
 

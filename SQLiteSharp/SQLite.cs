@@ -173,10 +173,6 @@ public partial class SQLiteConnection : ISQLiteConnection {
     /// </summary>
     public string DatabasePath { get; }
     /// <summary>
-    /// The SQLite library version number. <c>3007014</c> refers to <c>v3.7.14</c>.
-    /// </summary>
-    public int SQLiteVersionNumber { get; }
-    /// <summary>
     /// Whether Trace lines should be written that show the execution time of queries.
     /// </summary>
     public bool TimeExecution { get; set; }
@@ -220,8 +216,6 @@ public partial class SQLiteConnection : ISQLiteConnection {
 
         DatabasePath = connectionString.DatabasePath;
 
-        SQLiteVersionNumber = SQLite3.LibVersionNumber();
-
         SQLite3.Result result = SQLite3.Open(connectionString.DatabasePath, out Sqlite3DatabaseHandle handle, (int)connectionString.OpenFlags, connectionString.VfsName);
         Handle = handle;
 
@@ -245,6 +239,11 @@ public partial class SQLiteConnection : ISQLiteConnection {
         }
         connectionString.PostKeyAction?.Invoke(this);
     }
+
+    /// <summary>
+    /// The SQLite library version number. <c>3007014</c> refers to <c>v3.7.14</c>.
+    /// </summary>
+    public int SQLiteVersionNumber => SQLite3.LibVersionNumber();
 
     /// <summary>
     /// Enables the write ahead logging. WAL is significantly faster in most scenarios
