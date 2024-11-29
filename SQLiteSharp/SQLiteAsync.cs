@@ -6,7 +6,7 @@ namespace SQLiteSharp;
 
 public interface ISQLiteAsyncConnection {
     string DatabasePath { get; }
-    int LibVersionNumber { get; }
+    int SQLiteVersionNumber { get; }
     bool Trace { get; set; }
     Action<string> Tracer { get; set; }
     bool TimeExecution { get; set; }
@@ -97,14 +97,10 @@ public partial class SQLiteAsyncConnection : ISQLiteAsyncConnection {
         _connectionString = connectionString;
     }
 
-    /// <summary>
-    /// Gets the database path used by this connection.
-    /// </summary>
+    /// <inheritdoc cref="SQLiteConnection.DatabasePath"/>
     public string DatabasePath => GetConnection().DatabasePath;
-    /// <summary>
-    /// Gets the SQLite library version number. 3007014 would be v3.7.14
-    /// </summary>
-    public int LibVersionNumber => GetConnection().LibVersionNumber;
+    /// <inheritdoc cref="SQLiteConnection.SQLiteVersionNumber"/>
+    public int SQLiteVersionNumber => GetConnection().SQLiteVersionNumber;
 
     /// <summary>
     /// The amount of time to wait for a table to become unlocked.

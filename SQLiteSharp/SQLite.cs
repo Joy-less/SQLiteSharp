@@ -82,7 +82,7 @@ public enum CreateFlags {
 public interface ISQLiteConnection : IDisposable {
     Sqlite3DatabaseHandle? Handle { get; }
     string DatabasePath { get; }
-    int LibVersionNumber { get; }
+    int SQLiteVersionNumber { get; }
     bool TimeExecution { get; set; }
     bool Trace { get; set; }
     Action<string> Tracer { get; set; }
@@ -169,13 +169,13 @@ public partial class SQLiteConnection : ISQLiteConnection {
     public Sqlite3DatabaseHandle? Handle { get; private set; }
 
     /// <summary>
-    /// Gets the database path used by this connection.
+    /// The database path used by this connection.
     /// </summary>
     public string DatabasePath { get; }
     /// <summary>
-    /// Gets the SQLite library version number. 3007014 would be v3.7.14
+    /// The SQLite library version number. <c>3007014</c> refers to <c>v3.7.14</c>.
     /// </summary>
-    public int LibVersionNumber { get; }
+    public int SQLiteVersionNumber { get; }
     /// <summary>
     /// Whether Trace lines should be written that show the execution time of queries.
     /// </summary>
@@ -220,7 +220,7 @@ public partial class SQLiteConnection : ISQLiteConnection {
 
         DatabasePath = connectionString.DatabasePath;
 
-        LibVersionNumber = SQLite3.LibVersionNumber();
+        SQLiteVersionNumber = SQLite3.LibVersionNumber();
 
         SQLite3.Result result = SQLite3.Open(connectionString.DatabasePath, out Sqlite3DatabaseHandle handle, (int)connectionString.OpenFlags, connectionString.VfsName);
         Handle = handle;
