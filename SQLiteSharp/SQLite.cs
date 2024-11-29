@@ -2008,7 +2008,7 @@ public static class Orm {
             return "bigint";
         }
         else if (clrType == typeof(DateTimeOffset)) {
-            return "bigint";
+            return "blob";
         }
         else if (clrType.IsEnum) {
             return column.StoreAsText ? "varchar" : "integer";
@@ -2285,7 +2285,7 @@ public partial class SQLiteCommand(SQLiteConnection conn) {
                 SQLite3.BindInt64(stmt, index, dateTimeValue.Ticks);
             }
             else if (value is DateTimeOffset dateTimeOffsetValue) {
-                SQLite3.BindInt64(stmt, index, dateTimeOffsetValue.UtcTicks);
+                SQLite3.BindBlob(stmt, index, DateTimeOffsetToBytes(dateTimeOffsetValue));
             }
             else if (value is byte[] byteArrayValue) {
                 SQLite3.BindBlob(stmt, index, byteArrayValue);
@@ -2348,7 +2348,7 @@ public partial class SQLiteCommand(SQLiteConnection conn) {
                 return new DateTime(SQLite3.ColumnInt64(stmt, index));
             }
             else if (clrType == typeof(DateTimeOffset)) {
-                return new DateTimeOffset(SQLite3.ColumnInt64(stmt, index), TimeSpan.Zero);
+                return BytesToDateTimeOffset(SQLite3.ColumnBlob(stmt, index));
             }
             else if (clrType.IsEnum) {
                 if (type is SQLite3.ColType.Text) {
@@ -2406,6 +2406,18 @@ public partial class SQLiteCommand(SQLiteConnection conn) {
                 throw new NotSupportedException("Don't know how to read " + clrType);
             }
         }
+    }
+
+    internal static DateTimeOffset BytesToDateTimeOffset(byte[] bytes) {
+        long dateTicks = BitConverter.ToInt64(bytes, 0);
+        long offsetTicks = BitConverter.ToInt64(bytes, sizeof(long));
+        return new DateTimeOffset(new DateTime(dateTicks), TimeSpan.FromTicks(offsetTicks));
+    }
+    internal static byte[] DateTimeOffsetToBytes(DateTimeOffset dateTimeOffset) {
+        return [
+            .. BitConverter.GetBytes(dateTimeOffset.DateTime.Ticks),
+            .. BitConverter.GetBytes(dateTimeOffset.Offset.Ticks)
+        ];
     }
 }
 
@@ -2468,7 +2480,7 @@ internal class FastColumnSetter {
         }
         else if (clrType == typeof(DateTimeOffset)) {
             return CreateNullableTypedSetterDelegate<T, DateTimeOffset>(column, (stmt, index) => {
-                return new DateTimeOffset(SQLite3.ColumnInt64(stmt, index), TimeSpan.Zero);
+                return SQLiteCommand.BytesToDateTimeOffset(SQLite3.ColumnBlob(stmt, index));
             });
         }
         else if (clrType.IsEnum) {
