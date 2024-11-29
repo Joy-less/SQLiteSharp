@@ -1266,18 +1266,25 @@ public partial class SQLiteConnection : ISQLiteConnection {
             }
         }
 
-        object?[] values = new object[map.Columns.Length];
+        TableMapping.Column[] columns = map.Columns;
+
+        // Don't insert auto-incremented columns (unless "OR REPLACE"/"OR IGNORE")
+        if (string.IsNullOrEmpty(modifier)) {
+            columns = [.. columns.Where(column => !column.AutoIncrement)];
+        }
+
+        object?[] values = new object[columns.Length];
         for (int i = 0; i < values.Length; i++) {
-            values[i] = map.Columns[i].GetValue(obj);
+            values[i] = columns[i].GetValue(obj);
         }
 
         string query;
-        if (map.Columns.Length == 0) {
+        if (columns.Length == 0) {
             query = $"insert {modifier} into \"{map.TableName}\" default values";
         }
         else {
-            string columnsSql = string.Join(",", map.Columns.Select(column => "\"" + column.Name + "\""));
-            string valuesSql = string.Join(",", map.Columns.Select(column => "?"));
+            string columnsSql = string.Join(",", columns.Select(column => "\"" + column.Name + "\""));
+            string valuesSql = string.Join(",", columns.Select(column => "?"));
             query = $"insert {modifier} into \"{map.TableName}\"({columnsSql}) values ({valuesSql})";
         }
 
