@@ -2133,44 +2133,6 @@ public class TableMapping {
     }
 }
 
-class EnumCacheInfo {
-    public bool IsEnum { get; private set; }
-    public bool StoreAsText { get; private set; }
-    public Dictionary<int, string>? EnumValues { get; private set; }
-
-    public EnumCacheInfo(Type type) {
-        IsEnum = type.IsEnum;
-
-        if (IsEnum) {
-            StoreAsText = type.GetCustomAttribute<StoreAsTextAttribute>() is not null;
-
-            if (StoreAsText) {
-                EnumValues = [];
-                foreach (object value in Enum.GetValues(type)) {
-                    EnumValues[Convert.ToInt32(value)] = value.ToString()!;
-                }
-            }
-        }
-    }
-}
-
-static class EnumCache {
-    static readonly Dictionary<Type, EnumCacheInfo> Cache = [];
-
-    public static EnumCacheInfo GetInfo(Type type) {
-        lock (Cache) {
-            if (!Cache.TryGetValue(type, out EnumCacheInfo? info)) {
-                info = new EnumCacheInfo(type);
-                Cache[type] = info;
-            }
-            return info;
-        }
-    }
-    public static EnumCacheInfo GetInfo<T>() {
-        return GetInfo(typeof(T));
-    }
-}
-
 public static class Orm {
     public const string ImplicitPrimaryKeyName = "Id";
     public const string ImplicitIndexSuffix = "Id";
@@ -2508,14 +2470,12 @@ public partial class SQLiteCommand {
             else {
                 // Now we could possibly get an enum, retrieve cached info
                 Type valueType = value.GetType();
-                EnumCacheInfo enumInfo = EnumCache.GetInfo(valueType);
-                if (enumInfo.IsEnum) {
-                    int enumIntValue = Convert.ToInt32(value);
-                    if (enumInfo.StoreAsText) {
-                        SQLite3.BindText(stmt, index, enumInfo.EnumValues![enumIntValue]);
+                if (valueType.IsEnum) {
+                    if (valueType.GetCustomAttribute<StoreAsTextAttribute>() is not null) {
+                        SQLite3.BindText(stmt, index, Enum.GetName(valueType, value)!);
                     }
                     else {
-                        SQLite3.BindInt(stmt, index, enumIntValue);
+                        SQLite3.BindInt(stmt, index, Convert.ToInt32(value));
                     }
                 }
                 else {
