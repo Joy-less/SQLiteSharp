@@ -1738,7 +1738,7 @@ public class SQLiteConnectionString {
     }
 }
 
-[AttributeUsage(AttributeTargets.Class)]
+[AttributeUsage(AttributeTargets.Class | AttributeTargets.Struct)]
 public class TableAttribute(string name) : Attribute {
     public string Name { get; set; } = name;
 
@@ -1749,20 +1749,20 @@ public class TableAttribute(string name) : Attribute {
     public bool WithoutRowId { get; set; }
 }
 
-[AttributeUsage(AttributeTargets.Property)]
+[AttributeUsage(AttributeTargets.Property | AttributeTargets.Field)]
 public class ColumnAttribute(string name) : Attribute {
     public string Name { get; set; } = name;
 }
 
-[AttributeUsage(AttributeTargets.Property)]
+[AttributeUsage(AttributeTargets.Property | AttributeTargets.Field)]
 public class PrimaryKeyAttribute : Attribute {
 }
 
-[AttributeUsage(AttributeTargets.Property)]
+[AttributeUsage(AttributeTargets.Property | AttributeTargets.Field)]
 public class AutoIncrementAttribute : Attribute {
 }
 
-[AttributeUsage(AttributeTargets.Property, AllowMultiple = true)]
+[AttributeUsage(AttributeTargets.Property | AttributeTargets.Field, AllowMultiple = true)]
 public class IndexedAttribute : Attribute {
     public string? Name { get; set; }
     public int Order { get; set; }
@@ -1770,18 +1770,17 @@ public class IndexedAttribute : Attribute {
 
     public IndexedAttribute() {
     }
-
     public IndexedAttribute(string name, int order) {
         Name = name;
         Order = order;
     }
 }
 
-[AttributeUsage(AttributeTargets.Property)]
+[AttributeUsage(AttributeTargets.Property | AttributeTargets.Field)]
 public class IgnoreAttribute : Attribute {
 }
 
-[AttributeUsage(AttributeTargets.Property)]
+[AttributeUsage(AttributeTargets.Property | AttributeTargets.Field)]
 public class UniqueAttribute : IndexedAttribute {
     public override bool Unique {
         get => true;
@@ -1789,7 +1788,7 @@ public class UniqueAttribute : IndexedAttribute {
     }
 }
 
-[AttributeUsage(AttributeTargets.Property)]
+[AttributeUsage(AttributeTargets.Property | AttributeTargets.Field)]
 public class MaxLengthAttribute(int length) : Attribute {
     public int Value { get; } = length;
 }
@@ -1799,16 +1798,16 @@ public class MaxLengthAttribute(int length) : Attribute {
 /// "BINARY", "NOCASE", and "RTRIM" are supported.
 /// "BINARY" is the default.
 /// </summary>
-[AttributeUsage(AttributeTargets.Property)]
+[AttributeUsage(AttributeTargets.Property | AttributeTargets.Field)]
 public class CollationAttribute(string collation) : Attribute {
     public string Value { get; } = collation;
 }
 
-[AttributeUsage(AttributeTargets.Property)]
+[AttributeUsage(AttributeTargets.Property | AttributeTargets.Field)]
 public class NotNullAttribute : Attribute {
 }
 
-[AttributeUsage(AttributeTargets.Enum)]
+[AttributeUsage(AttributeTargets.Enum | AttributeTargets.Field)]
 public class StoreAsTextAttribute : Attribute {
 }
 
