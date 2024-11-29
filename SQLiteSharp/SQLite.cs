@@ -20,7 +20,7 @@ public class NotNullConstraintViolationException : SQLiteException {
     public NotNullConstraintViolationException(SQLite3.Result result, string message, TableMapping? mapping, object? obj)
         : base(result, message) {
         if (mapping is not null && obj is not null) {
-            Columns = mapping.Columns.Where(column => !column.IsNullable && column.GetValue(obj) is null);
+            Columns = mapping.Columns.Where(column => column.NotNull && column.GetValue(obj) is null);
         }
     }
     public NotNullConstraintViolationException(SQLite3.Result result, string message)
@@ -46,7 +46,7 @@ public enum SQLiteOpenFlags {
 [Flags]
 public enum CreateFlags {
     /// <summary>
-    /// Use the default creation options
+    /// Use the default creation options.
     /// </summary>
     None = 0x000,
     /// <summary>
@@ -59,22 +59,21 @@ public enum CreateFlags {
     /// </summary>
     ImplicitIndex = 0x002,
     /// <summary>
-    /// Create a primary key for a property called 'Id' and
-    /// create an indices for properties ending in 'Id' (case-insensitive).
+    /// Create a primary key for a property called 'Id' and create indices for properties ending in 'Id' (case-insensitive).
     /// </summary>
-    AllImplicit = 0x003,
+    AllImplicit = ImplicitPrimaryKey | ImplicitIndex,
     /// <summary>
     /// Force the primary key property to be auto incrementing.
-    /// This avoids the need for the [AutoIncrement] attribute.
-    /// The primary key property on the class should have type int or long.
+    /// This avoids the need for [<see cref="AutoIncrementAttribute"/>].
+    /// The primary key property type should be <see cref="int"/> or <see cref="long"/>.
     /// </summary>
     AutoIncrementPrimaryKey = 0x004,
     /// <summary>
-    /// Create virtual table using FTS3
+    /// Create a virtual table using FTS3.
     /// </summary>
     FullTextSearch3 = 0x100,
     /// <summary>
-    /// Create virtual table using FTS4
+    /// Create a virtual table using FTS4.
     /// </summary>
     FullTextSearch4 = 0x200
 }
@@ -105,7 +104,7 @@ public interface ISQLiteConnection : IDisposable {
     int CreateIndex<T>(Expression<Func<T, object>> property, bool unique = false);
     CreateTableResult CreateTable<T>(CreateFlags createFlags = CreateFlags.None);
     CreateTableResult CreateTable(Type type, CreateFlags createFlags = CreateFlags.None);
-    CreateTablesResult CreateTables(CreateFlags createFlags = CreateFlags.None, params IEnumerable<Type> types);
+    CreateTablesResult CreateTables(IEnumerable<Type> types, CreateFlags createFlags = CreateFlags.None);
     IEnumerable<T> DeferredQuery<T>(string query, params IEnumerable<object?> parameters) where T : new();
     IEnumerable<object> DeferredQuery(TableMapping map, string query, params IEnumerable<object?> parameters);
     int Delete(object objectToDelete);
@@ -530,7 +529,7 @@ public partial class SQLiteConnection : ISQLiteConnection {
     /// <returns>
     /// Whether the table was created or migrated for each type.
     /// </returns>
-    public CreateTablesResult CreateTables(CreateFlags createFlags = CreateFlags.None, params IEnumerable<Type> types) {
+    public CreateTablesResult CreateTables(IEnumerable<Type> types, CreateFlags createFlags = CreateFlags.None) {
         CreateTablesResult result = new();
         foreach (Type type in types) {
             CreateTableResult oneResult = CreateTable(type, createFlags);
@@ -1261,7 +1260,7 @@ public partial class SQLiteConnection : ISQLiteConnection {
 
         TableMapping map = GetMapping(obj.GetType());
 
-        if (map.PrimaryKey is not null && map.PrimaryKey.IsAutoGuid) {
+        if (map.PrimaryKey is not null && map.PrimaryKey.AutoGuid) {
             if (Equals(map.PrimaryKey.GetValue(obj), Guid.Empty)) {
                 map.PrimaryKey.SetValue(obj, Guid.NewGuid());
             }
@@ -1555,22 +1554,6 @@ public partial class SQLiteConnection : ISQLiteConnection {
     }
 
     /// <summary>
-    /// Deletes all the objects from the specified table.
-    /// WARNING WARNING: Let me repeat. It deletes ALL the objects from the
-    /// specified table. Do you really want to do that?
-    /// </summary>
-    /// <returns>
-    /// The number of objects deleted.
-    /// </returns>
-    /// <typeparam name='T'>
-    /// The type of objects to delete.
-    /// </typeparam>
-    public int DeleteAll<T>() {
-        TableMapping map = GetMapping<T>();
-        return DeleteAll(map);
-    }
-
-    /// <summary>
     /// Deletes all the objects from the specified table.<br/>
     /// WARNING: To be clear, it deletes ALL the objects from the specified table. Do you really want that?
     /// </summary>
@@ -1586,6 +1569,10 @@ public partial class SQLiteConnection : ISQLiteConnection {
         if (count > 0)
             OnTableChanged(map, NotifyTableChangedAction.Delete);
         return count;
+    }
+    /// <inheritdoc cref="DeleteAll(TableMapping)"/>
+    public int DeleteAll<T>() {
+        return DeleteAll(GetMapping<T>());
     }
 
     /// <summary>
@@ -1850,10 +1837,10 @@ public class TableMapping {
         }
         Columns = [.. columns];
         foreach (Column column in Columns) {
-            if (column.IsAutoIncrement && column.IsPrimaryKey) {
+            if (column.AutoIncrement && column.PrimaryKey) {
                 _autoIncrementedPrimaryKey = column;
             }
-            if (column.IsPrimaryKey) {
+            if (column.PrimaryKey) {
                 PrimaryKey = column;
             }
         }
@@ -1888,13 +1875,13 @@ public class TableMapping {
         public string PropertyName { get => _memberInfo.Name; }
         public Type ColumnType { get; }
         public string Collation { get; }
-        public bool IsAutoIncrement { get; }
-        public bool IsAutoGuid { get; }
-        public bool IsPrimaryKey { get; }
-        public IEnumerable<IndexedAttribute> Indices { get; }
-        public bool IsNullable { get; }
+        public bool AutoIncrement { get; }
+        public bool AutoGuid { get; }
+        public bool PrimaryKey { get; }
+        public bool NotNull { get; }
         public int? MaxStringLength { get; }
         public bool StoreAsText { get; }
+        public IEnumerable<IndexedAttribute> Indices { get; }
 
         private readonly MemberInfo _memberInfo;
 
@@ -1908,18 +1895,18 @@ public class TableMapping {
             ColumnType = Nullable.GetUnderlyingType(memberType) ?? memberType;
             Collation = Orm.GetCollation(member);
 
-            IsPrimaryKey = Orm.IsPrimaryKey(member)
+            PrimaryKey = Orm.IsPrimaryKey(member)
                 || (createFlags.HasFlag(CreateFlags.ImplicitPrimaryKey) && string.Equals(member.Name, Orm.ImplicitPrimaryKeyName, StringComparison.OrdinalIgnoreCase));
 
-            bool isAutoIncrement = Orm.IsAutoIncrement(member) || (IsPrimaryKey && ((createFlags & CreateFlags.AutoIncrementPrimaryKey) == CreateFlags.AutoIncrementPrimaryKey));
-            IsAutoGuid = isAutoIncrement && ColumnType == typeof(Guid);
-            IsAutoIncrement = isAutoIncrement && !IsAutoGuid;
+            bool isAutoIncrement = Orm.IsAutoIncrement(member) || (PrimaryKey && ((createFlags & CreateFlags.AutoIncrementPrimaryKey) == CreateFlags.AutoIncrementPrimaryKey));
+            AutoGuid = isAutoIncrement && ColumnType == typeof(Guid);
+            AutoIncrement = isAutoIncrement && !AutoGuid;
 
             Indices = Orm.GetIndices(member);
-            if (!Indices.Any() && !IsPrimaryKey && createFlags.HasFlag(CreateFlags.ImplicitIndex) && Name.EndsWith(Orm.ImplicitIndexSuffix, StringComparison.OrdinalIgnoreCase)) {
+            if (!Indices.Any() && !PrimaryKey && createFlags.HasFlag(CreateFlags.ImplicitIndex) && Name.EndsWith(Orm.ImplicitIndexSuffix, StringComparison.OrdinalIgnoreCase)) {
                 Indices = [new IndexedAttribute()];
             }
-            IsNullable = !(IsPrimaryKey || Orm.IsMarkedNotNull(member));
+            NotNull = PrimaryKey || Orm.IsMarkedNotNull(member);
             MaxStringLength = Orm.MaxStringLength(member);
 
             StoreAsText = memberType.GetCustomAttribute<StoreAsTextAttribute>() is not null;
@@ -1979,13 +1966,13 @@ public static class Orm {
     public static string SqlDecl(TableMapping.Column column) {
         string decl = $"\"{column.Name}\" {SqlType(column)} ";
 
-        if (column.IsPrimaryKey) {
+        if (column.PrimaryKey) {
             decl += "primary key ";
         }
-        if (column.IsAutoIncrement) {
+        if (column.AutoIncrement) {
             decl += "autoincrement ";
         }
-        if (!column.IsNullable) {
+        if (column.NotNull) {
             decl += "not null ";
         }
         if (!string.IsNullOrEmpty(column.Collation)) {
@@ -2720,8 +2707,8 @@ public class TableQuery<T> : BaseTableQuery, IEnumerable<T> {
         string commandText = $"delete from \"{Table.TableName}\" where {CompileExpression(predicate!, parameters).CommandText}";
         SQLiteCommand command = Connection.CreateCommand(commandText, parameters);
 
-        int result = command.ExecuteNonQuery();
-        return result;
+        int rowCount = command.ExecuteNonQuery();
+        return rowCount;
     }
 
     /// <summary>

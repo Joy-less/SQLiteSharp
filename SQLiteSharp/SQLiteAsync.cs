@@ -20,8 +20,8 @@ public interface ISQLiteAsyncConnection {
     Task<int> CreateIndexAsync(string indexName, string tableName, string[] columnNames, bool unique = false);
     Task<int> CreateIndexAsync<T>(Expression<Func<T, object>> property, bool unique = false);
     Task<CreateTableResult> CreateTableAsync<T>(CreateFlags createFlags = CreateFlags.None) where T : new();
-    Task<CreateTableResult> CreateTableAsync(Type ty, CreateFlags createFlags = CreateFlags.None);
-    Task<CreateTablesResult> CreateTablesAsync(CreateFlags createFlags = CreateFlags.None, params Type[] types);
+    Task<CreateTableResult> CreateTableAsync(Type type, CreateFlags createFlags = CreateFlags.None);
+    Task<CreateTablesResult> CreateTablesAsync(IEnumerable<Type> types, CreateFlags createFlags = CreateFlags.None);
     Task<IEnumerable<T>> DeferredQueryAsync<T>(string query, params IEnumerable<object?> parameters) where T : new();
     Task<IEnumerable<object>> DeferredQueryAsync(TableMapping map, string query, params IEnumerable<object?> parameters);
     Task<int> DeleteAllAsync<T>();
@@ -241,8 +241,8 @@ public partial class SQLiteAsyncConnection : ISQLiteAsyncConnection {
     /// <returns>
     /// Whether the table was created or migrated for each type.
     /// </returns>
-    public Task<CreateTablesResult> CreateTablesAsync(CreateFlags createFlags = CreateFlags.None, params Type[] types) {
-        return LockAsync(connection => connection.CreateTables(createFlags, types));
+    public Task<CreateTablesResult> CreateTablesAsync(IEnumerable<Type> types, CreateFlags createFlags = CreateFlags.None) {
+        return LockAsync(connection => connection.CreateTables(types, createFlags));
     }
     /// <summary>
     /// Executes a "drop table" on the database.  This is non-recoverable.
@@ -678,59 +678,6 @@ public partial class SQLiteAsyncConnection : ISQLiteAsyncConnection {
     /// </returns>
     public Task<int> ExecuteAsync(string query, params IEnumerable<object?> parameters) {
         return LockAsync(connection => connection.Execute(query, parameters));
-    }
-
-    /// <summary>
-    /// Inserts all specified objects.
-    /// </summary>
-    /// <param name="objects">
-    /// An <see cref="IEnumerable"/> of the objects to insert.
-    /// <param name="runInTransaction"/>
-    /// A boolean indicating if the inserts should be wrapped in a transaction.
-    /// </param>
-    /// <returns>
-    /// The number of rows added to the table.
-    /// </returns>
-    public Task<int> InsertAllAsync(IEnumerable objects, bool runInTransaction = true) {
-        return LockAsync(connection => connection.InsertAll(objects, runInTransaction));
-    }
-
-    /// <summary>
-    /// Inserts all specified objects.
-    /// </summary>
-    /// <param name="objects">
-    /// An <see cref="IEnumerable"/> of the objects to insert.
-    /// </param>
-    /// <param name="extra">
-    /// Literal SQL code that gets placed into the command. INSERT {extra} INTO ...
-    /// </param>
-    /// <param name="runInTransaction">
-    /// A boolean indicating if the inserts should be wrapped in a transaction.
-    /// </param>
-    /// <returns>
-    /// The number of rows added to the table.
-    /// </returns>
-    public Task<int> InsertAllAsync(IEnumerable objects, string modifier, bool runInTransaction = true) {
-        return LockAsync(connection => connection.InsertAll(objects, modifier, runInTransaction));
-    }
-
-    /// <summary>
-    /// Inserts all specified objects.
-    /// </summary>
-    /// <param name="objects">
-    /// An <see cref="IEnumerable"/> of the objects to insert.
-    /// </param>
-    /// <param name="objType">
-    /// The type of object to insert.
-    /// </param>
-    /// <param name="runInTransaction">
-    /// A boolean indicating if the inserts should be wrapped in a transaction.
-    /// </param>
-    /// <returns>
-    /// The number of rows added to the table.
-    /// </returns>
-    public Task<int> InsertAllAsync(IEnumerable objects, Type objType, bool runInTransaction = true) {
-        return LockAsync(connection => connection.InsertAll(objects, objType, runInTransaction));
     }
 
     /// <summary>
