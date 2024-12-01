@@ -1,5 +1,4 @@
 ﻿using System.Collections;
-using System.Diagnostics;
 using System.Reflection;
 using System.Linq.Expressions;
 using System.Collections.Concurrent;
@@ -14,14 +13,13 @@ public partial class SQLiteConnection : IDisposable {
 
     public Sqlite3DatabaseHandle Handle { get; }
 
-
     /// <summary>
-    /// The database path used by this connection.
+    /// The options used to open this connection.
     /// </summary>
-    public string DatabasePath { get; }
+    public SQLiteConnectionOptions Options { get; }
 
     /// <summary>
-    /// Setup the SQLite Portable Class Library.
+    /// Initializes the raw SQLite Portable Class Library.
     /// </summary>
     static SQLiteConnection() {
         SQLitePCL.Batteries_V2.Init();
@@ -30,29 +28,25 @@ public partial class SQLiteConnection : IDisposable {
     /// <summary>
     /// Creates a new connection to the given SQLite database.
     /// </summary>
-    public SQLiteConnection(SQLiteConnectionString connectionString) {
-        if (connectionString.DatabasePath is null) {
-            throw new InvalidOperationException("DatabasePath must be specified");
-        }
+    public SQLiteConnection(SQLiteConnectionOptions options) {
+        Options = options;
 
-        DatabasePath = connectionString.DatabasePath;
-
-        SQLiteRaw.Result result = SQLiteRaw.Open(connectionString.DatabasePath, out Sqlite3DatabaseHandle handle, connectionString.OpenFlags, null);
+        SQLiteRaw.Result openResult = SQLiteRaw.Open(options.DatabasePath, out Sqlite3DatabaseHandle handle, options.OpenFlags, null);
         Handle = handle;
 
-        if (result is not SQLiteRaw.Result.OK) {
-            throw new SQLiteException(result, $"Could not open database file: {DatabasePath} ({result})");
+        if (openResult is not SQLiteRaw.Result.OK) {
+            throw new SQLiteException(openResult, $"Could not open database file {Quote(Options.DatabasePath)}: {openResult}");
         }
 
         BusyTimeout = TimeSpan.FromSeconds(1.0);
 
-        if (connectionString.Key is not null) {
-            SQLiteRaw.SetKey(Handle, connectionString.Key);
+        if (options.Key is not null) {
+            SQLiteRaw.SetKey(Handle, options.Key);
         }
     }
-    /// <inheritdoc cref="SQLiteConnection(SQLiteConnectionString)"/>
+    /// <inheritdoc cref="SQLiteConnection(SQLiteConnectionOptions)"/>
     public SQLiteConnection(string databasePath, OpenFlags openFlags = OpenFlags.Recommended)
-        : this(new SQLiteConnectionString(databasePath, openFlags)) {
+        : this(new SQLiteConnectionOptions(databasePath, openFlags)) {
     }
     public void Dispose() {
         GC.SuppressFinalize(this);
@@ -77,17 +71,6 @@ public partial class SQLiteConnection : IDisposable {
     /// The SQLite library version number. <c>3007014</c> refers to <c>v3.7.14</c>.
     /// </summary>
     public static int SQLiteVersionNumber => SQLiteRaw.LibVersionNumber();
-
-    /// <summary>
-    /// Convert an input string to a quoted SQL string that can be safely used in queries.<br/>
-    /// For example, <c>red 'blue' green</c> becomes <c>'red ''blue'' green'</c>.
-    /// </summary>
-    public static string Quote(string? unsafeString) {
-        if (unsafeString is null) {
-            return "null";
-        }
-        return $"'{unsafeString.Replace("'", "''")}'";
-    }
 
     /// <summary>
     /// Changes the 256-bit (32-byte) encryption key used to encrypt/decrypt the database.
@@ -168,7 +151,7 @@ public partial class SQLiteConnection : IDisposable {
     /// The TableMapping used to identify the table.
     /// </param>
     public int DropTable(TableMapping map) {
-        string query = $"drop table if exists \"{map.TableName}\"";
+        string query = $"drop table if exists {Quote(map.TableName)}";
         return Execute(query);
     }
 
@@ -203,7 +186,7 @@ public partial class SQLiteConnection : IDisposable {
             };
 
             // Add column declarations
-            string columnDeclarations = string.Join(", ", map.Columns.Select(Orm.GetSqlDeclaration));
+            string columnDeclarations = string.Join(", ", map.Columns.Select(ObjectMapper.GetSqlDeclaration));
 
             // Add without row ID modifier
             string withoutRowIdModifier = map.WithoutRowId ? "without rowid" : "";
@@ -337,7 +320,7 @@ public partial class SQLiteConnection : IDisposable {
         }
 
         foreach (TableMapping.Column columnToAdd in columnsToAdd) {
-            string sql = $"alter table {Quote(map.TableName)} add column {Orm.GetSqlDeclaration(columnToAdd)}";
+            string sql = $"alter table {Quote(map.TableName)} add column {ObjectMapper.GetSqlDeclaration(columnToAdd)}";
             Execute(sql);
         }
     }
@@ -664,12 +647,12 @@ public partial class SQLiteConnection : IDisposable {
 
         string query;
         if (columns.Length == 0) {
-            query = $"insert {modifier} into \"{map.TableName}\" default values";
+            query = $"insert {modifier} into {Quote(map.TableName)} default values";
         }
         else {
-            string columnsSql = string.Join(",", columns.Select(column => "\"" + column.Name + "\""));
+            string columnsSql = string.Join(",", columns.Select(column => Quote(column.Name)));
             string valuesSql = string.Join(",", columns.Select(column => "?"));
-            query = $"insert {modifier} into \"{map.TableName}\"({columnsSql}) values ({valuesSql})";
+            query = $"insert {modifier} into {Quote(map.TableName)}({columnsSql}) values ({valuesSql})";
         }
 
         int rowCount = Execute(query, values);
@@ -778,7 +761,7 @@ public partial class SQLiteConnection : IDisposable {
             parameters = new List<object?>(values);
         }
         parameters.Add(primaryKey.GetValue(obj));
-        string query = $"update \"{map.TableName}\" set {string.Join(",", columns.Select(column => $"\"{column.Name}\" = ? "))} where \"{primaryKey.Name}\" = ?";
+        string query = $"update {Quote(map.TableName)} set {string.Join(",", columns.Select(column => $"{Quote(column.Name)} = ? "))} where \"{primaryKey.Name}\" = ?";
 
         int rowCount = Execute(query, parameters);
         return rowCount;
@@ -803,7 +786,7 @@ public partial class SQLiteConnection : IDisposable {
     public int Delete(object primaryKey, TableMapping map) {
         TableMapping.Column primaryKeyColumn = map.PrimaryKey
             ?? throw new NotSupportedException($"Can't delete in table '{map.TableName}' since it has no primary key");
-        string query = $"delete from \"{map.TableName}\" where \"{primaryKeyColumn.Name}\" = ?";
+        string query = $"delete from {Quote(map.TableName)} where {Quote(primaryKeyColumn.Name)} = ?";
         int rowCount = Execute(query, primaryKey);
         return rowCount;
     }
@@ -843,9 +826,9 @@ public partial class SQLiteConnection : IDisposable {
     /// The number of objects deleted.
     /// </returns>
     public int DeleteAll(TableMapping map) {
-        string query = $"delete from \"{map.TableName}\"";
-        int count = Execute(query);
-        return count;
+        string query = $"delete from {Quote(map.TableName)}";
+        int rowCount = Execute(query);
+        return rowCount;
     }
     /// <inheritdoc cref="DeleteAll(TableMapping)"/>
     public int DeleteAll<T>() {

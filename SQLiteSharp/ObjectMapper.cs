@@ -1,16 +1,14 @@
-using System.Collections;
 using System.Text;
 using System.Reflection;
-using System.Linq.Expressions;
 
 namespace SQLiteSharp;
 
-public static class Orm {
+public class ObjectMapper {
     public const string ImplicitPrimaryKeyName = "Id";
     public const string ImplicitIndexSuffix = "Id";
 
     public static string GetSqlDeclaration(TableMapping.Column column) {
-        string declaration = $"{SQLiteConnection.Quote(column.Name)} {SQLiteConnection.Quote(GetSqlType(column))} collate {SQLiteConnection.Quote(column.Collation)} ";
+        string declaration = $"{Quote(column.Name)} {Quote(GetSqlType(column))} collate {Quote(column.Collation)} ";
 
         if (column.PrimaryKey) {
             declaration += "primary key ";

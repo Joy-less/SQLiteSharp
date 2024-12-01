@@ -45,7 +45,7 @@ public class TableMapping {
             if (PrimaryKey is null) {
                 throw new InvalidOperationException("Table mapping has no primary key");
             }
-            return $"select * from \"{TableName}\" where \"{PrimaryKey.Name}\" = ?";
+            return $"select * from {Quote(TableName)} where {Quote(PrimaryKey.Name)} = ?";
         }
     }
 
@@ -82,21 +82,21 @@ public class TableMapping {
 
             // If this type is Nullable<T> then Nullable.GetUnderlyingType returns the T, otherwise it returns null, so get the actual type instead
             Type = Nullable.GetUnderlyingType(memberType) ?? memberType;
-            Collation = Orm.GetCollation(member);
+            Collation = ObjectMapper.GetCollation(member);
 
-            PrimaryKey = Orm.IsPrimaryKey(member)
-                || (createFlags.HasFlag(CreateFlags.ImplicitPrimaryKey) && string.Equals(member.Name, Orm.ImplicitPrimaryKeyName, StringComparison.OrdinalIgnoreCase));
+            PrimaryKey = ObjectMapper.IsPrimaryKey(member)
+                || (createFlags.HasFlag(CreateFlags.ImplicitPrimaryKey) && string.Equals(member.Name, ObjectMapper.ImplicitPrimaryKeyName, StringComparison.OrdinalIgnoreCase));
 
-            bool isAutoIncrement = Orm.IsAutoIncrement(member) || (PrimaryKey && createFlags.HasFlag(CreateFlags.AutoIncrementPrimaryKey));
+            bool isAutoIncrement = ObjectMapper.IsAutoIncrement(member) || (PrimaryKey && createFlags.HasFlag(CreateFlags.AutoIncrementPrimaryKey));
             AutoGuid = isAutoIncrement && Type == typeof(Guid);
             AutoIncrement = isAutoIncrement && !AutoGuid;
 
-            Indices = Orm.GetIndices(member);
-            if (!Indices.Any() && !PrimaryKey && createFlags.HasFlag(CreateFlags.ImplicitIndex) && Name.EndsWith(Orm.ImplicitIndexSuffix, StringComparison.OrdinalIgnoreCase)) {
+            Indices = ObjectMapper.GetIndices(member);
+            if (!Indices.Any() && !PrimaryKey && createFlags.HasFlag(CreateFlags.ImplicitIndex) && Name.EndsWith(ObjectMapper.ImplicitIndexSuffix, StringComparison.OrdinalIgnoreCase)) {
                 Indices = [new IndexedAttribute()];
             }
-            NotNull = PrimaryKey || Orm.IsMarkedNotNull(member);
-            MaxStringLength = Orm.MaxStringLength(member);
+            NotNull = PrimaryKey || ObjectMapper.IsMarkedNotNull(member);
+            MaxStringLength = ObjectMapper.MaxStringLength(member);
 
             StoreAsText = memberType.GetCustomAttribute<StoreByNameAttribute>() is not null;
         }

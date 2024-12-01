@@ -94,7 +94,7 @@ public class TableQuery<T> : TableQuery, IEnumerable<T> {
         }
 
         List<object?> parameters = [];
-        string commandText = $"delete from \"{Table.TableName}\" where {CompileExpression(predicate!, parameters).CommandText}";
+        string commandText = $"delete from {Quote(Table.TableName)} where {CompileExpression(predicate!, parameters).CommandText}";
         SQLiteCommand command = Connection.CreateCommand(commandText, parameters);
 
         int rowCount = command.ExecuteNonQuery();
@@ -174,13 +174,13 @@ public class TableQuery<T> : TableQuery, IEnumerable<T> {
             throw new NotSupportedException("Joins are not supported.");
         }
 
-        string commandText = $"select {selectionList} from \"{Table.TableName}\"";
+        string commandText = $"select {selectionList} from {Quote(Table.TableName)}";
         List<object?> parameters = [];
         if (_where is not null) {
             commandText += $" where {CompileExpression(_where, parameters).CommandText}";
         }
         if ((_orderBys is not null) && (_orderBys.Count > 0)) {
-            string orderByString = string.Join(", ", _orderBys.Select(orderBy => $"\"{orderBy.ColumnName}\"" + (orderBy.Ascending ? "" : " desc")));
+            string orderByString = string.Join(", ", _orderBys.Select(orderBy => $"{Quote(orderBy.ColumnName)}" + (orderBy.Ascending ? "" : " desc")));
             commandText += $" order by {orderByString}";
         }
         if (_limit is not null) {
@@ -352,7 +352,7 @@ public class TableQuery<T> : TableQuery, IEnumerable<T> {
                 // Need to translate it if that column name is mapped
                 string columnName = Table.FindColumnByMemberName(memberExpression.Member.Name)!.Name;
                 return new CompileResult() {
-                    CommandText = $"\"{columnName}\""
+                    CommandText = Quote(columnName)
                 };
             }
             else {
