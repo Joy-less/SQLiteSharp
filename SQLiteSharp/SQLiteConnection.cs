@@ -46,24 +46,8 @@ public partial class SQLiteConnection : IDisposable {
     }
 
     /// <summary>
-    /// Constructs a new SQLiteConnection and opens a SQLite database specified by databasePath.
+    /// Creates a new connection to the given SQLite database.
     /// </summary>
-    /// <param name="databasePath">
-    /// Specifies the path to the database file.
-    /// </param>
-    /// <param name="openFlags">
-    /// Flags controlling how the connection should be opened.
-    /// </param>
-    public SQLiteConnection(string databasePath, OpenFlags openFlags = OpenFlags.ReadWrite | OpenFlags.Create)
-        : this(new SQLiteConnectionString(databasePath, openFlags)) {
-    }
-
-    /// <summary>
-    /// Constructs a new SQLiteConnection and opens a SQLite database specified by databasePath.
-    /// </summary>
-    /// <param name="connectionString">
-    /// Details on how to find and open the database.
-    /// </param>
     public SQLiteConnection(SQLiteConnectionString connectionString) {
         if (connectionString.DatabasePath is null) {
             throw new InvalidOperationException("DatabasePath must be specified");
@@ -82,7 +66,29 @@ public partial class SQLiteConnection : IDisposable {
         Tracer = line => Debug.WriteLine(line);
 
         if (connectionString.Key is not null) {
-            SetKey(connectionString.Key);
+            SQLiteRaw.SetKey(Handle, connectionString.Key);
+        }
+    }
+    /// <inheritdoc cref="SQLiteConnection(SQLiteConnectionString)"/>
+    public SQLiteConnection(string databasePath, OpenFlags openFlags = OpenFlags.Recommended)
+        : this(new SQLiteConnectionString(databasePath, openFlags)) {
+    }
+    public void Dispose() {
+        GC.SuppressFinalize(this);
+
+        if (Handle.IsInvalid) {
+            return;
+        }
+
+        try {
+            SQLiteRaw.Result result = SQLiteRaw.Close(Handle);
+            if (result is not SQLiteRaw.Result.OK) {
+                string errorMessage = SQLiteRaw.GetErrorMessage(Handle);
+                throw new SQLiteException(result, errorMessage);
+            }
+        }
+        finally {
+            Handle.Dispose();
         }
     }
 
@@ -90,15 +96,6 @@ public partial class SQLiteConnection : IDisposable {
     /// The SQLite library version number. <c>3007014</c> refers to <c>v3.7.14</c>.
     /// </summary>
     public static int SQLiteVersionNumber => SQLiteRaw.LibVersionNumber();
-
-    /// <summary>
-    /// Enables the write ahead logging. WAL is significantly faster in most scenarios
-    /// by providing better concurrency and better disk IO performance than the normal
-    /// journal mode. You only need to call this function once in the lifetime of the database.
-    /// </summary>
-    public void EnableWriteAheadLogging() {
-        ExecuteScalar<string>("PRAGMA journal_mode=WAL");
-    }
 
     /// <summary>
     /// Convert an input string to a quoted SQL string that can be safely used in queries.<br/>
@@ -111,13 +108,6 @@ public partial class SQLiteConnection : IDisposable {
         return $"'{unsafeString.Replace("'", "''")}'";
     }
 
-    /// <summary>
-    /// Sets the 256-bit (32-byte) key used to encrypt/decrypt the database.<br/>
-    /// This must be the first thing you call before doing anything else with this connection if your database is encrypted.
-    /// </summary>
-    public void SetKey(byte[] key) {
-        SQLiteRaw.SetKey(Handle, key);
-    }
     /// <summary>
     /// Changes the 256-bit (32-byte) encryption key used to encrypt/decrypt the database.
     /// </summary>
@@ -990,7 +980,7 @@ public partial class SQLiteConnection : IDisposable {
     /// <param name="databaseName">The name of the database to backup (usually "main").</param>
     public void Backup(string destinationDatabasePath, string databaseName = "main") {
         // Open the destination
-        SQLiteRaw.Result result = SQLiteRaw.Open(destinationDatabasePath, out Sqlite3DatabaseHandle destHandle, OpenFlags.ReadOnly, null);
+        SQLiteRaw.Result result = SQLiteRaw.Open(destinationDatabasePath, out Sqlite3DatabaseHandle destHandle, OpenFlags.Recommended, null);
         if (result is not SQLiteRaw.Result.OK) {
             throw new SQLiteException(result, "Failed to open destination database");
         }
@@ -1020,23 +1010,173 @@ public partial class SQLiteConnection : IDisposable {
         }
     }
 
-    public void Dispose() {
-        GC.SuppressFinalize(this);
-
-        if (Handle.IsInvalid) {
-            return;
-        }
-
-        try {
-            SQLiteRaw.Result result = SQLiteRaw.Close(Handle);
-            if (result is not SQLiteRaw.Result.OK) {
-                string msg = SQLiteRaw.GetErrorMessage(Handle);
-                throw new SQLiteException(result, msg);
-            }
-        }
-        finally {
-            Handle.Dispose();
-        }
+    /// <inheritdoc cref="EnableLoadExtension(bool)"/>
+    public Task EnableLoadExtensionAsync(bool enabled) {
+        return Task.Run(() => EnableLoadExtension(enabled));
+    }
+    /// <inheritdoc cref="CreateTable(Type, CreateFlags)"/>
+    public Task<CreateTableResult> CreateTableAsync(Type type, CreateFlags createFlags = CreateFlags.None) {
+        return Task.Run(() => CreateTable(type, createFlags));
+    }
+    /// <inheritdoc cref="CreateTable{T}(CreateFlags)"/>
+    public Task<CreateTableResult> CreateTableAsync<T>(CreateFlags createFlags = CreateFlags.None) where T : new() {
+        return Task.Run(() => CreateTable<T>(createFlags));
+    }
+    /// <inheritdoc cref="CreateTables(IEnumerable{Type}, CreateFlags)"/>
+    public Task<Dictionary<Type, CreateTableResult>> CreateTablesAsync(IEnumerable<Type> types, CreateFlags createFlags = CreateFlags.None) {
+        return Task.Run(() => CreateTables(types, createFlags));
+    }
+    /// <inheritdoc cref="DropTable{T}()"/>
+    public Task<int> DropTableAsync<T>() where T : new() {
+        return Task.Run(() => DropTable<T>());
+    }
+    /// <inheritdoc cref="DropTable(TableMapping)"/>
+    public Task<int> DropTableAsync(TableMapping map) {
+        return Task.Run(() => DropTable(map));
+    }
+    /// <inheritdoc cref="CreateIndex(string, string, IEnumerable{string}, bool)"/>
+    public Task CreateIndexAsync(string indexName, string tableName, IEnumerable<string> columnNames, bool unique = false) {
+        return Task.Run(() => CreateIndex(indexName, tableName, columnNames, unique));
+    }
+    /// <inheritdoc cref="CreateIndex(string, IEnumerable{string}, bool)"/>
+    public Task CreateIndexAsync(string tableName, IEnumerable<string> columnNames, bool unique = false) {
+        return Task.Run(() => CreateIndex(tableName, columnNames, unique));
+    }
+    /// <inheritdoc cref="CreateIndex{T}(Expression{Func{T, object}}, bool)"/>
+    public Task CreateIndexAsync<T>(Expression<Func<T, object>> property, bool unique = false) {
+        return Task.Run(() => CreateIndex(property, unique));
+    }
+    /// <inheritdoc cref="Insert(object, string?)"/>
+    public Task<int> InsertAsync(object obj, string? modifier = null) {
+        return Task.Run(() => Insert(obj, modifier));
+    }
+    /// <inheritdoc cref="InsertAll(IEnumerable, string?, bool)"/>
+    public Task<int> InsertAllAsync(IEnumerable objects, string? modifier = null, bool runInTransaction = true) {
+        return Task.Run(() => InsertAll(objects, modifier, runInTransaction));
+    }
+    /// <inheritdoc cref="InsertOrReplace(object)"/>
+    public Task<int> InsertOrReplaceAsync(object obj) {
+        return Task.Run(() => InsertOrReplace(obj));
+    }
+    /// <inheritdoc cref="InsertOrReplaceAll(IEnumerable, bool)"/>
+    public Task<int> InsertOrReplaceAllAsync(IEnumerable objects, bool runInTransaction = true) {
+        return Task.Run(() => InsertOrReplaceAll(objects, runInTransaction));
+    }
+    /// <inheritdoc cref="InsertOrIgnore(object)"/>
+    public Task<int> InsertOrIgnoreAsync(object obj) {
+        return Task.Run(() => InsertOrIgnore(obj));
+    }
+    /// <inheritdoc cref="InsertOrIgnoreAll(IEnumerable, bool)"/>
+    public Task<int> InsertOrIgnoreAllAsync(IEnumerable objects, bool runInTransaction = true) {
+        return Task.Run(() => InsertOrIgnoreAll(objects, runInTransaction));
+    }
+    /// <inheritdoc cref="Update(object)"/>
+    public Task<int> UpdateAsync(object obj) {
+        return Task.Run(() => Update(obj));
+    }
+    /// <inheritdoc cref="UpdateAll(IEnumerable, bool)"/>
+    public Task<int> UpdateAllAsync(IEnumerable objects, bool runInTransaction = true) {
+        return Task.Run(() => UpdateAll(objects, runInTransaction));
+    }
+    /// <inheritdoc cref="Delete(object, TableMapping)"/>
+    public Task<int> DeleteAsync(object primaryKey, TableMapping map) {
+        return Task.Run(() => Delete(primaryKey, map));
+    }
+    /// <inheritdoc cref="Delete{T}(object)"/>
+    public Task<int> DeleteAsync<T>(object primaryKey) {
+        return Task.Run(() => Delete<T>(primaryKey));
+    }
+    /// <inheritdoc cref="Delete(object)"/>
+    public Task<int> DeleteAsync(object objectToDelete) {
+        return Task.Run(() => Delete(objectToDelete));
+    }
+    /// <inheritdoc cref="DeleteAll(TableMapping)"/>
+    public Task<int> DeleteAllAsync(TableMapping map) {
+        return Task.Run(() => DeleteAll(map));
+    }
+    /// <inheritdoc cref="DeleteAll{T}()"/>
+    public Task<int> DeleteAllAsync<T>() {
+        return Task.Run(() => DeleteAll<T>());
+    }
+    /// <inheritdoc cref="Backup(string, string)"/>
+    public Task BackupAsync(string destinationDatabasePath, string databaseName = "main") {
+        return Task.Run(() => Backup(destinationDatabasePath, databaseName));
+    }
+    /// <inheritdoc cref="Get(object, TableMapping)"/>
+    public Task<object> GetAsync(object pk, TableMapping map) {
+        return Task.Run(() => Get(pk, map));
+    }
+    /// <inheritdoc cref="Get{T}(object)"/>
+    public Task<T> GetAsync<T>(object primaryKey) where T : new() {
+        return Task.Run(() => Get<T>(primaryKey));
+    }
+    /// <inheritdoc cref="Get{T}(Expression{Func{T, bool}})"/>
+    public Task<T> GetAsync<T>(Expression<Func<T, bool>> predicate) where T : new() {
+        return Task.Run(() => Get<T>(predicate));
+    }
+    /// <inheritdoc cref="Find(object, TableMapping)"/>
+    public Task<object?> FindAsync(object pk, TableMapping map) {
+        return Task.Run(() => Find(pk, map));
+    }
+    /// <inheritdoc cref="Find(object)"/>
+    public Task<T?> FindAsync<T>(object pk) where T : new() {
+        return Task.Run(() => Find<T>(pk));
+    }
+    /// <inheritdoc cref="Find{T}(Expression{Func{T, bool}})"/>
+    public Task<T?> FindAsync<T>(Expression<Func<T, bool>> predicate) where T : new() {
+        return Task.Run(() => Find(predicate));
+    }
+    /// <inheritdoc cref="FindWithQuery{T}(string, IEnumerable{object?})"/>
+    public Task<T?> FindWithQueryAsync<T>(string query, params IEnumerable<object?> parameters) where T : new() {
+        return Task.Run(() => FindWithQuery<T>(query, parameters));
+    }
+    /// <inheritdoc cref="FindWithQuery(TableMapping, string, IEnumerable{object?})"/>
+    public Task<object?> FindWithQueryAsync(TableMapping map, string query, params IEnumerable<object?> parameters) {
+        return Task.Run(() => FindWithQuery(map, query, parameters));
+    }
+    /// <inheritdoc cref="GetMapping(Type, CreateFlags)"/>
+    public Task<TableMapping> GetMappingAsync(Type type, CreateFlags createFlags = CreateFlags.None) {
+        return Task.Run(() => GetMapping(type, createFlags));
+    }
+    /// <inheritdoc cref="GetMappingAsync(CreateFlags)"/>
+    public Task<TableMapping> GetMappingAsync<T>(CreateFlags createFlags = CreateFlags.None) where T : new() {
+        return Task.Run(() => GetMapping<T>(createFlags));
+    }
+    /// <inheritdoc cref="GetTableInfo(string)"/>
+    public Task<List<ColumnInfo>> GetTableInfoAsync(string tableName) {
+        return Task.Run(() => GetTableInfo(tableName));
+    }
+    /// <inheritdoc cref="Execute(string, IEnumerable{object?})"/>
+    public Task<int> ExecuteAsync(string query, params IEnumerable<object?> parameters) {
+        return Task.Run(() => Execute(query, parameters));
+    }
+    /// <inheritdoc cref="RunInTransaction(Action)"/>
+    public Task RunInTransactionAsync(Action action) {
+        return Task.Run(() => RunInTransaction(action));
+    }
+    /// <inheritdoc cref="Table{T}"/>
+    public AsyncTableQuery<T> TableAsync<T>() where T : new() {
+        return new AsyncTableQuery<T>(Table<T>());
+    }
+    /// <inheritdoc cref="ExecuteScalar{T}(string, IEnumerable{object?})"/>
+    public Task<T> ExecuteScalarAsync<T>(string query, params IEnumerable<object?> parameters) {
+        return Task.Run(() => ExecuteScalar<T>(query, parameters));
+    }
+    /// <inheritdoc cref="Query(TableMapping, string, IEnumerable{object?})"/>
+    public Task<IEnumerable<object>> QueryAsync(TableMapping map, string query, params IEnumerable<object?> parameters) {
+        return Task.Run(() => Query(map, query, parameters));
+    }
+    /// <inheritdoc cref="Query{T}(string, IEnumerable{object?})"/>
+    public Task<IEnumerable<T>> QueryAsync<T>(string query, params IEnumerable<object?> parameters) where T : new() {
+        return Task.Run(() => Query<T>(query, parameters));
+    }
+    /// <inheritdoc cref="QueryScalars{T}(string, IEnumerable{object?})"/>
+    public Task<List<T>> QueryScalarsAsync<T>(string query, params IEnumerable<object?> parameters) {
+        return Task.Run(() => QueryScalars<T>(query, parameters));
+    }
+    /// <inheritdoc cref="ChangeKey(byte[])"/>
+    public Task ChangeKeyAsync(byte[] key) {
+        return Task.Run(() => ChangeKey(key));
     }
 
     private void InvokeTableChanged(TableMapping table, NotifyTableChangedAction action) {

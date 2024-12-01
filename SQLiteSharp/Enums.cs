@@ -62,6 +62,8 @@ public enum OpenFlags {
     Wal = 0x00080000,
     NoFollow = 0x01000000,
     ExresCode = 0x02000000,
+
+    Recommended = Create | ReadWrite | FullMutex | Wal,
 }
 
 public enum CreateTableResult {
