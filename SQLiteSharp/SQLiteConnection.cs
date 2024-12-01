@@ -619,18 +619,16 @@ public partial class SQLiteConnection : IDisposable {
     /// Creates a savepoint with a random name, executes the action and commits the transaction.<br/>
     /// The action is rolled back on failure.
     /// </summary>
-    /// <returns>Whether the transaction was committed successfully.</returns>
-    public bool RunInTransaction(Action action) {
+    public void RunInTransaction(Action action) {
         string savePointName = Guid.NewGuid().ToString();
         try {
             SavePoint(savePointName);
             action();
             Commit(savePointName);
-            return true;
         }
         catch (Exception) {
             Rollback(savePointName);
-            return false;
+            throw;
         }
     }
 
