@@ -111,7 +111,7 @@ public partial class SQLiteCommand(SQLiteConnection connection) {
     /// </remarks>
     protected virtual void OnInstanceCreated(object obj) { }
 
-    public IEnumerable<T> ExecuteQuery<T>(TableMapping map) {
+    public IEnumerable<object> ExecuteQuery(TableMapping map) {
         Sqlite3Statement statement = Prepare();
         try {
             while (SQLiteRaw.Step(statement) is SQLiteRaw.Result.Row) {
@@ -132,12 +132,15 @@ public partial class SQLiteCommand(SQLiteConnection connection) {
                     column.SetValue(obj, value);
                 }
                 OnInstanceCreated(obj);
-                yield return (T)obj;
+                yield return obj;
             }
         }
         finally {
             SQLiteRaw.Finalize(statement);
         }
+    }
+    public IEnumerable<T> ExecuteQuery<T>(TableMapping map) {
+        return ExecuteQuery(map).Cast<T>();
     }
     public IEnumerable<T> ExecuteQuery<T>() {
         return ExecuteQuery<T>(_connection.GetMapping<T>());
