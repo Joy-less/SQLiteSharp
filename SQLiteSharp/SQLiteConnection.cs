@@ -686,20 +686,13 @@ public partial class SQLiteConnection : IDisposable {
     /// The <paramref name="modifier"/> is literal SQL added after <c>INSERT</c> (e.g. <c>OR REPLACE</c>).
     /// </summary>
     /// <returns>The number of rows added.</returns>
-    public int InsertAll(IEnumerable objects, string? modifier = null, bool runInTransaction = true) {
+    public int InsertAll(IEnumerable objects, string? modifier = null) {
         int counter = 0;
-        if (runInTransaction) {
-            RunInTransaction(() => {
-                foreach (object obj in objects) {
-                    counter += Insert(obj, modifier);
-                }
-            });
-        }
-        else {
+        RunInTransaction(() => {
             foreach (object obj in objects) {
                 counter += Insert(obj, modifier);
             }
-        }
+        });
         return counter;
     }
     /// <summary>
@@ -720,20 +713,13 @@ public partial class SQLiteConnection : IDisposable {
     /// If a UNIQUE constraint violation occurs, the old object is replaced.
     /// </remarks>
     /// <returns>The number of rows added/modified.</returns>
-    public int InsertOrReplaceAll(IEnumerable objects, bool runInTransaction = true) {
+    public int InsertOrReplaceAll(IEnumerable objects) {
         int counter = 0;
-        if (runInTransaction) {
-            RunInTransaction(() => {
-                foreach (object obj in objects) {
-                    counter += InsertOrReplace(obj);
-                }
-            });
-        }
-        else {
+        RunInTransaction(() => {
             foreach (object obj in objects) {
                 counter += InsertOrReplace(obj);
             }
-        }
+        });
         return counter;
     }
     /// <summary>
@@ -754,34 +740,20 @@ public partial class SQLiteConnection : IDisposable {
     /// If a UNIQUE constraint violation occurs, the new object is not inserted.
     /// </remarks>
     /// <returns>The number of rows added/modified.</returns>
-    public int InsertOrIgnoreAll(IEnumerable objects, bool runInTransaction = true) {
+    public int InsertOrIgnoreAll(IEnumerable objects) {
         int counter = 0;
-        if (runInTransaction) {
-            RunInTransaction(() => {
-                foreach (object obj in objects) {
-                    counter += InsertOrIgnore(obj);
-                }
-            });
-        }
-        else {
+        RunInTransaction(() => {
             foreach (object obj in objects) {
                 counter += InsertOrIgnore(obj);
             }
-        }
+        });
         return counter;
     }
 
     /// <summary>
-    /// Updates all of the columns of a table using the specified object
-    /// except for its primary key.
-    /// The object is required to have a primary key.
+    /// Updates all of the columns of a table using the specified object except for its primary key.<br/>
+    /// The table must have a designated primary key.
     /// </summary>
-    /// <param name="obj">
-    /// The object to update. It must have a primary key designated using the PrimaryKeyAttribute.
-    /// </param>
-    /// <param name="objType">
-    /// The type of object to insert.
-    /// </param>
     /// <returns>
     /// The number of rows updated.
     /// </returns>
@@ -811,33 +783,14 @@ public partial class SQLiteConnection : IDisposable {
         int rowCount = Execute(query, parameters);
         return rowCount;
     }
-
-    /// <summary>
-    /// Updates all specified objects.
-    /// </summary>
-    /// <param name="objects">
-    /// An <see cref="IEnumerable"/> of the objects to insert.
-    /// </param>
-    /// <param name="runInTransaction">
-    /// A boolean indicating if the inserts should be wrapped in a transaction
-    /// </param>
-    /// <returns>
-    /// The number of rows modified.
-    /// </returns>
-    public int UpdateAll(IEnumerable objects, bool runInTransaction = true) {
+    /// <inheritdoc cref="Update(object)"/>
+    public int UpdateAll(IEnumerable objects) {
         int counter = 0;
-        if (runInTransaction) {
-            RunInTransaction(() => {
-                foreach (object obj in objects) {
-                    counter += Update(obj);
-                }
-            });
-        }
-        else {
+        RunInTransaction(() => {
             foreach (object obj in objects) {
                 counter += Update(obj);
             }
-        }
+        });
         return counter;
     }
 
@@ -870,6 +823,16 @@ public partial class SQLiteConnection : IDisposable {
     public int Delete(object objectToDelete) {
         TableMapping map = GetMapping(objectToDelete.GetType());
         return Delete(map.PrimaryKey?.GetValue(objectToDelete)!, map);
+    }
+    /// <inheritdoc cref="Delete(object)"/>
+    public int DeleteAll(IEnumerable objects) {
+        int counter = 0;
+        RunInTransaction(() => {
+            foreach (object obj in objects) {
+                counter += Delete(obj);
+            }
+        });
+        return counter;
     }
 
     /// <summary>
@@ -964,33 +927,33 @@ public partial class SQLiteConnection : IDisposable {
     public Task<int> InsertAsync(object obj, string? modifier = null) {
         return Task.Run(() => Insert(obj, modifier));
     }
-    /// <inheritdoc cref="InsertAll(IEnumerable, string?, bool)"/>
-    public Task<int> InsertAllAsync(IEnumerable objects, string? modifier = null, bool runInTransaction = true) {
-        return Task.Run(() => InsertAll(objects, modifier, runInTransaction));
+    /// <inheritdoc cref="InsertAll(IEnumerable, string?)"/>
+    public Task<int> InsertAllAsync(IEnumerable objects, string? modifier = null) {
+        return Task.Run(() => InsertAll(objects, modifier));
     }
     /// <inheritdoc cref="InsertOrReplace(object)"/>
     public Task<int> InsertOrReplaceAsync(object obj) {
         return Task.Run(() => InsertOrReplace(obj));
     }
-    /// <inheritdoc cref="InsertOrReplaceAll(IEnumerable, bool)"/>
-    public Task<int> InsertOrReplaceAllAsync(IEnumerable objects, bool runInTransaction = true) {
-        return Task.Run(() => InsertOrReplaceAll(objects, runInTransaction));
+    /// <inheritdoc cref="InsertOrReplaceAll(IEnumerable)"/>
+    public Task<int> InsertOrReplaceAllAsync(IEnumerable objects) {
+        return Task.Run(() => InsertOrReplaceAll(objects));
     }
     /// <inheritdoc cref="InsertOrIgnore(object)"/>
     public Task<int> InsertOrIgnoreAsync(object obj) {
         return Task.Run(() => InsertOrIgnore(obj));
     }
-    /// <inheritdoc cref="InsertOrIgnoreAll(IEnumerable, bool)"/>
-    public Task<int> InsertOrIgnoreAllAsync(IEnumerable objects, bool runInTransaction = true) {
-        return Task.Run(() => InsertOrIgnoreAll(objects, runInTransaction));
+    /// <inheritdoc cref="InsertOrIgnoreAll(IEnumerable)"/>
+    public Task<int> InsertOrIgnoreAllAsync(IEnumerable objects) {
+        return Task.Run(() => InsertOrIgnoreAll(objects));
     }
     /// <inheritdoc cref="Update(object)"/>
     public Task<int> UpdateAsync(object obj) {
         return Task.Run(() => Update(obj));
     }
-    /// <inheritdoc cref="UpdateAll(IEnumerable, bool)"/>
-    public Task<int> UpdateAllAsync(IEnumerable objects, bool runInTransaction = true) {
-        return Task.Run(() => UpdateAll(objects, runInTransaction));
+    /// <inheritdoc cref="UpdateAll(IEnumerable)"/>
+    public Task<int> UpdateAllAsync(IEnumerable objects) {
+        return Task.Run(() => UpdateAll(objects));
     }
     /// <inheritdoc cref="Delete(object, TableMapping)"/>
     public Task<int> DeleteAsync(object primaryKey, TableMapping map) {
