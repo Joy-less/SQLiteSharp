@@ -38,7 +38,7 @@ public partial class SQLiteAsyncConnection {
     public string DatabasePath => GetConnection().DatabasePath;
 
     /// <inheritdoc cref="SQLiteConnection.SQLiteVersionNumber"/>
-    public int SQLiteVersionNumber => GetConnection().SQLiteVersionNumber;
+    public static int SQLiteVersionNumber => SQLiteConnection.SQLiteVersionNumber;
 
     /// <summary>
     /// The amount of time to wait for a table to become unlocked.
@@ -85,11 +85,6 @@ public partial class SQLiteAsyncConnection {
         get => GetConnection().TimeExecution;
         set => GetConnection().TimeExecution = value;
     }
-    /// <summary>
-    /// Returns the mappings from types to tables that the connection
-    /// currently understands.
-    /// </summary>
-    public IEnumerable<TableMapping> TableMappings => GetConnection().TableMappings;
     /// <summary>
     /// Gets the pooled lockable connection used by this async connection.<br/>
     /// You should never need to use this. This is provided only to add additional functionality to SQLite-net.
@@ -198,61 +193,16 @@ public partial class SQLiteAsyncConnection {
         return LockAsync(connection => connection.DropTable(map));
     }
 
-    /// <summary>
-    /// Creates an index for the specified table and column.
-    /// </summary>
-    /// <param name="tableName">Name of the database table</param>
-    /// <param name="columnName">Name of the column to index</param>
-    /// <param name="unique">Whether the index should be unique</param>
-    /// <returns>Zero on success.</returns>
-    public Task<int> CreateIndexAsync(string tableName, string columnName, bool unique = false) {
-        return LockAsync(connection => connection.CreateIndex(tableName, columnName, unique));
-    }
-
-    /// <summary>
-    /// Creates an index for the specified table and column.
-    /// </summary>
-    /// <param name="indexName">Name of the index to create</param>
-    /// <param name="tableName">Name of the database table</param>
-    /// <param name="columnName">Name of the column to index</param>
-    /// <param name="unique">Whether the index should be unique</param>
-    /// <returns>Zero on success.</returns>
-    public Task<int> CreateIndexAsync(string indexName, string tableName, string columnName, bool unique = false) {
-        return LockAsync(connection => connection.CreateIndex(indexName, tableName, columnName, unique));
-    }
-
-    /// <summary>
-    /// Creates an index for the specified table and columns.
-    /// </summary>
-    /// <param name="tableName">Name of the database table</param>
-    /// <param name="columnNames">An array of column names to index</param>
-    /// <param name="unique">Whether the index should be unique</param>
-    /// <returns>Zero on success.</returns>
-    public Task<int> CreateIndexAsync(string tableName, string[] columnNames, bool unique = false) {
-        return LockAsync(connection => connection.CreateIndex(tableName, columnNames, unique));
-    }
-
-    /// <summary>
-    /// Creates an index for the specified table and columns.
-    /// </summary>
-    /// <param name="indexName">Name of the index to create</param>
-    /// <param name="tableName">Name of the database table</param>
-    /// <param name="columnNames">An array of column names to index</param>
-    /// <param name="unique">Whether the index should be unique</param>
-    /// <returns>Zero on success.</returns>
-    public Task<int> CreateIndexAsync(string indexName, string tableName, string[] columnNames, bool unique = false) {
+    /// <inheritdoc cref="SQLiteConnection.CreateIndex(string, string, IEnumerable{string}, bool)"/>
+    public Task CreateIndexAsync(string indexName, string tableName, IEnumerable<string> columnNames, bool unique = false) {
         return LockAsync(connection => connection.CreateIndex(indexName, tableName, columnNames, unique));
     }
-
-    /// <summary>
-    /// Creates an index for the specified object property.
-    /// e.g. CreateIndex&lt;Client&gt;(c => c.Name);
-    /// </summary>
-    /// <typeparam name="T">Type to reflect to a database table.</typeparam>
-    /// <param name="property">Property to index</param>
-    /// <param name="unique">Whether the index should be unique</param>
-    /// <returns>Zero on success.</returns>
-    public Task<int> CreateIndexAsync<T>(Expression<Func<T, object>> property, bool unique = false) {
+    /// <inheritdoc cref="SQLiteConnection.CreateIndex(string, IEnumerable{string}, bool)"/>
+    public Task CreateIndexAsync(string tableName, IEnumerable<string> columnNames, bool unique = false) {
+        return LockAsync(connection => connection.CreateIndex(tableName, columnNames, unique));
+    }
+    /// <inheritdoc cref="SQLiteConnection.CreateIndex{T}(Expression{Func{T, object}}, bool)"/>
+    public Task CreateIndexAsync<T>(Expression<Func<T, object>> property, bool unique = false) {
         return LockAsync(connection => connection.CreateIndex(property, unique));
     }
 
@@ -280,157 +230,41 @@ public partial class SQLiteAsyncConnection {
     public Task<int> InsertOrIgnoreAllAsync(IEnumerable objects, bool runInTransaction = true) {
         return LockAsync(connection => connection.InsertOrIgnoreAll(objects));
     }
-
-    /// <summary>
-    /// Updates all of the columns of a table using the specified object
-    /// except for its primary key.
-    /// The object is required to have a primary key.
-    /// </summary>
-    /// <param name="obj">
-    /// The object to update. It must have a primary key designated using the PrimaryKeyAttribute.
-    /// </param>
-    /// <returns>
-    /// The number of rows updated.
-    /// </returns>
+    /// <inheritdoc cref="SQLiteConnection.Update(object)"/>
     public Task<int> UpdateAsync(object obj) {
         return LockAsync(connection => connection.Update(obj));
     }
-
-    /// <summary>
-    /// Updates all of the columns of a table using the specified object
-    /// except for its primary key.
-    /// The object is required to have a primary key.
-    /// </summary>
-    /// <param name="obj">
-    /// The object to update. It must have a primary key designated using the PrimaryKeyAttribute.
-    /// </param>
-    /// <param name="objType">
-    /// The type of object to insert.
-    /// </param>
-    /// <returns>
-    /// The number of rows updated.
-    /// </returns>
-    public Task<int> UpdateAsync(object obj, Type objType) {
-        return LockAsync(connection => connection.Update(obj, objType));
-    }
-
-    /// <summary>
-    /// Updates all specified objects.
-    /// </summary>
-    /// <param name="objects">
-    /// An <see cref="IEnumerable"/> of the objects to insert.
-    /// </param>
-    /// <param name="runInTransaction">
-    /// A boolean indicating if the inserts should be wrapped in a transaction
-    /// </param>
-    /// <returns>
-    /// The number of rows modified.
-    /// </returns>
+    /// <inheritdoc cref="SQLiteConnection.UpdateAll(IEnumerable, bool)"/>
     public Task<int> UpdateAllAsync(IEnumerable objects, bool runInTransaction = true) {
         return LockAsync(connection => connection.UpdateAll(objects, runInTransaction));
     }
-
-    /// <summary>
-    /// Deletes the given object from the database using its primary key.
-    /// </summary>
-    /// <param name="objectToDelete">
-    /// The object to delete. It must have a primary key designated using the PrimaryKeyAttribute.
-    /// </param>
-    /// <returns>
-    /// The number of rows deleted.
-    /// </returns>
-    public Task<int> DeleteAsync(object objectToDelete) {
-        return LockAsync(connection => connection.Delete(objectToDelete));
-    }
-
-    /// <summary>
-    /// Deletes the object with the specified primary key.
-    /// </summary>
-    /// <param name="primaryKey">
-    /// The primary key of the object to delete.
-    /// </param>
-    /// <returns>
-    /// The number of objects deleted.
-    /// </returns>
-    /// <typeparam name='T'>
-    /// The type of object.
-    /// </typeparam>
-    public Task<int> DeleteAsync<T>(object primaryKey) {
-        return LockAsync(connection => connection.Delete<T>(primaryKey));
-    }
-
-    /// <summary>
-    /// Deletes the object with the specified primary key.
-    /// </summary>
-    /// <param name="primaryKey">
-    /// The primary key of the object to delete.
-    /// </param>
-    /// <param name="map">
-    /// The TableMapping used to identify the table.
-    /// </param>
-    /// <returns>
-    /// The number of objects deleted.
-    /// </returns>
+    /// <inheritdoc cref="SQLiteConnection.Delete(object, TableMapping)"/>
     public Task<int> DeleteAsync(object primaryKey, TableMapping map) {
         return LockAsync(connection => connection.Delete(primaryKey, map));
     }
-
-    /// <summary>
-    /// Deletes all the objects from the specified table.
-    /// WARNING WARNING: Let me repeat. It deletes ALL the objects from the
-    /// specified table. Do you really want to do that?
-    /// </summary>
-    /// <returns>
-    /// The number of objects deleted.
-    /// </returns>
-    /// <typeparam name='T'>
-    /// The type of objects to delete.
-    /// </typeparam>
-    public Task<int> DeleteAllAsync<T>() {
-        return LockAsync(connection => connection.DeleteAll<T>());
+    /// <inheritdoc cref="SQLiteConnection.Delete{T}(object)"/>
+    public Task<int> DeleteAsync<T>(object primaryKey) {
+        return LockAsync(connection => connection.Delete<T>(primaryKey));
     }
-
-    /// <summary>
-    /// Deletes all the objects from the specified table.
-    /// WARNING WARNING: Let me repeat. It deletes ALL the objects from the
-    /// specified table. Do you really want to do that?
-    /// </summary>
-    /// <param name="map">
-    /// The TableMapping used to identify the table.
-    /// </param>
-    /// <returns>
-    /// The number of objects deleted.
-    /// </returns>
+    /// <inheritdoc cref="SQLiteConnection.Delete(object)"/>
+    public Task<int> DeleteAsync(object objectToDelete) {
+        return LockAsync(connection => connection.Delete(objectToDelete));
+    }
+    /// <inheritdoc cref="SQLiteConnection.DeleteAll(TableMapping)"/>
     public Task<int> DeleteAllAsync(TableMapping map) {
         return LockAsync(connection => connection.DeleteAll(map));
     }
-
-    /// <summary>
-    /// Backup the entire database to the specified path.
-    /// </summary>
-    /// <param name="destinationDatabasePath">Path to backup file.</param>
-    /// <param name="databaseName">The name of the database to backup (usually "main").</param>
-    public Task BackupAsync(string destinationDatabasePath, string databaseName = "main") {
-        return LockAsync(connection => {
-            connection.Backup(destinationDatabasePath, databaseName);
-            return 0;
-        });
+    /// <inheritdoc cref="SQLiteConnection.DeleteAll{T}()"/>
+    public Task<int> DeleteAllAsync<T>() {
+        return LockAsync(connection => connection.DeleteAll<T>());
     }
-
-    /// <summary>
-    /// Attempts to retrieve an object with the given primary key from the table
-    /// associated with the specified type. Use of this method requires that
-    /// the given type have a designated PrimaryKey (using the PrimaryKeyAttribute).
-    /// </summary>
-    /// <param name="pk">
-    /// The primary key.
-    /// </param>
-    /// <returns>
-    /// The object with the given primary key. Throws a not found exception
-    /// if the object is not found.
-    /// </returns>
-    public Task<T> GetAsync<T>(object pk) where T : new() {
-        return LockAsync(connection => connection.Get<T>(pk));
+    /// <inheritdoc cref="SQLiteConnection.Backup(string, string)"/>
+    public Task BackupAsync(string destinationDatabasePath, string databaseName = "main") {
+        return LockAsync(connection => connection.Backup(destinationDatabasePath, databaseName));
+    }
+    /// <inheritdoc cref="SQLiteConnection.Get{T}(object)"/>
+    public Task<T> GetAsync<T>(object primaryKey) where T : new() {
+        return LockAsync(connection => connection.Get<T>(primaryKey));
     }
 
     /// <summary>
@@ -629,7 +463,7 @@ public partial class SQLiteAsyncConnection {
     /// </param>
     public Task RunInTransactionAsync(Action<SQLiteConnection> action) {
         return TransactAsync(connection => {
-            connection.BeginTransaction();
+            connection.SavePoint();
             try {
                 action(connection);
                 connection.Commit();
@@ -680,43 +514,6 @@ public partial class SQLiteAsyncConnection {
     /// <summary>
     /// Creates a SQLiteCommand given the command text (SQL) with arguments. Place a '?'
     /// in the command text for each of the arguments and then executes that command.
-    /// It returns each row of the result using the mapping automatically generated for
-    /// the given type.
-    /// </summary>
-    /// <param name="query">
-    /// The fully escaped SQL.
-    /// </param>
-    /// <param name="parameters">
-    /// Arguments to substitute for the occurences of '?' in the query.
-    /// </param>
-    /// <returns>
-    /// A list with one result for each row returned by the query.
-    /// </returns>
-    public Task<IEnumerable<T>> QueryAsync<T>(string query, params IEnumerable<object?> parameters) where T : new() {
-        return LockAsync(connection => connection.Query<T>(query, parameters));
-    }
-
-    /// <summary>
-    /// Creates a SQLiteCommand given the command text (SQL) with arguments. Place a '?'
-    /// in the command text for each of the arguments and then executes that command.
-    /// It returns the first column of each row of the result.
-    /// </summary>
-    /// <param name="query">
-    /// The fully escaped SQL.
-    /// </param>
-    /// <param name="parameters">
-    /// Arguments to substitute for the occurences of '?' in the query.
-    /// </param>
-    /// <returns>
-    /// A list with one result for the first column of each row returned by the query.
-    /// </returns>
-    public Task<List<T>> QueryScalarsAsync<T>(string query, params IEnumerable<object?> parameters) {
-        return LockAsync(connection => connection.QueryScalars<T>(query, parameters));
-    }
-
-    /// <summary>
-    /// Creates a SQLiteCommand given the command text (SQL) with arguments. Place a '?'
-    /// in the command text for each of the arguments and then executes that command.
     /// It returns each row of the result using the specified mapping. This function is
     /// only used by libraries in order to query the database via introspection. It is
     /// normally not used.
@@ -751,25 +548,17 @@ public partial class SQLiteAsyncConnection {
     /// Arguments to substitute for the occurences of '?' in the query.
     /// </param>
     /// <returns>
-    /// An enumerable with one result for each row returned by the query.
-    /// The enumerator will call sqlite3_step on each call to MoveNext, so the database
-    /// connection must remain open for the lifetime of the enumerator.
+    /// A list with one result for each row returned by the query.
     /// </returns>
-    public Task<IEnumerable<T>> DeferredQueryAsync<T>(string query, params IEnumerable<object?> parameters) where T : new() {
-        return LockAsync(connection => (IEnumerable<T>)connection.DeferredQuery<T>(query, parameters).ToList());
+    public Task<IEnumerable<T>> QueryAsync<T>(string query, params IEnumerable<object?> parameters) where T : new() {
+        return LockAsync(connection => connection.Query<T>(query, parameters));
     }
 
     /// <summary>
     /// Creates a SQLiteCommand given the command text (SQL) with arguments. Place a '?'
     /// in the command text for each of the arguments and then executes that command.
-    /// It returns each row of the result using the specified mapping. This function is
-    /// only used by libraries in order to query the database via introspection. It is
-    /// normally not used.
+    /// It returns the first column of each row of the result.
     /// </summary>
-    /// <param name="map">
-    /// A <see cref="TableMapping"/> to use to convert the resulting rows
-    /// into objects.
-    /// </param>
     /// <param name="query">
     /// The fully escaped SQL.
     /// </param>
@@ -777,28 +566,15 @@ public partial class SQLiteAsyncConnection {
     /// Arguments to substitute for the occurences of '?' in the query.
     /// </param>
     /// <returns>
-    /// An enumerable with one result for each row returned by the query.
-    /// The enumerator will call sqlite3_step on each call to MoveNext, so the database
-    /// connection must remain open for the lifetime of the enumerator.
+    /// A list with one result for the first column of each row returned by the query.
     /// </returns>
-    public Task<IEnumerable<object>> DeferredQueryAsync(TableMapping map, string query, params IEnumerable<object?> parameters) {
-        return LockAsync(connection => (IEnumerable<object>)connection.DeferredQuery(map, query, parameters).ToList());
+    public Task<List<T>> QueryScalarsAsync<T>(string query, params IEnumerable<object?> parameters) {
+        return LockAsync(connection => connection.QueryScalars<T>(query, parameters));
     }
 
-    /// <summary>
-    /// Change the encryption key for a SQLCipher database with "pragma rekey = ...".
-    /// </summary>
-    /// <param name="key">Encryption key plain text that is converted to the real encryption key using PBKDF2 key derivation</param>
-    public Task ReKeyAsync(string key) {
-        return LockAsync(connection => connection.ReKey(key));
-    }
-
-    /// <summary>
-    /// Change the encryption key for a SQLCipher database.
-    /// </summary>
-    /// <param name="key">256-bit (32 byte) or 384-bit (48 bytes) encryption key data</param>
-    public Task ReKeyAsync(byte[] key) {
-        return LockAsync(connection => connection.ReKey(key));
+    /// <inheritdoc cref="SQLiteConnection.ChangeKey(byte[])"/>
+    public Task ChangeKeyAsync(byte[] key) {
+        return LockAsync(connection => connection.ChangeKey(key));
     }
 }
 
@@ -960,7 +736,7 @@ internal class SQLiteConnectionPool {
         }
     }
 
-    private readonly ConcurrentDictionary<string, Entry> _entries = [];
+    private readonly ConcurrentDictionary<SQLiteConnectionString, Entry> _entries = [];
 
     /// <summary>
     /// Gets the singleton instance of the connection tool.
@@ -971,12 +747,12 @@ internal class SQLiteConnectionPool {
         return GetConnectionAndTransactionLock(connectionString, out _);
     }
     public SQLiteConnectionWithLock GetConnectionAndTransactionLock(SQLiteConnectionString connectionString, out object transactionLock) {
-        Entry entry = _entries.GetOrAdd(connectionString.UniqueKey, key => new Entry(connectionString));
+        Entry entry = _entries.GetOrAdd(connectionString, key => new Entry(connectionString));
         transactionLock = entry.TransactionLock;
         return entry.Connection!;
     }
     public void CloseConnection(SQLiteConnectionString connectionString) {
-        if (_entries.TryRemove(connectionString.UniqueKey, out Entry? entry)) {
+        if (_entries.TryRemove(connectionString, out Entry? entry)) {
             entry.Close();
         }
     }

@@ -5,166 +5,12 @@ using System.Linq.Expressions;
 
 namespace SQLiteSharp;
 
-public class TableMapping {
-    public Type MappedType { get; }
-    public string TableName { get; }
-    public bool WithoutRowId { get; }
-    public Column[] Columns { get; }
-    public Column? PrimaryKey { get; }
-    public string GetByPrimaryKeySql { get; }
-    public CreateFlags CreateFlags { get; }
-
-    internal MapMethod Method { get; } = MapMethod.ByName;
-
-    private readonly Column? _autoIncrementedPrimaryKey;
-
-    public TableMapping(Type type, CreateFlags createFlags = CreateFlags.None) {
-        MappedType = type;
-        CreateFlags = createFlags;
-
-        TableAttribute? tableAttribute = type.GetCustomAttribute<TableAttribute>();
-
-        TableName = !string.IsNullOrEmpty(tableAttribute?.Name) ? tableAttribute!.Name : MappedType.Name;
-        WithoutRowId = tableAttribute is not null && tableAttribute.WithoutRowId;
-
-        MemberInfo[] members = [.. type.GetProperties(), .. type.GetFields()];
-        List<Column> columns = new(members.Length);
-        foreach (MemberInfo member in members) {
-            bool ignore = member.GetCustomAttribute<IgnoreAttribute>() is not null;
-            if (!ignore) {
-                columns.Add(new Column(member, createFlags));
-            }
-        }
-        Columns = [.. columns];
-        foreach (Column column in Columns) {
-            if (column.AutoIncrement && column.PrimaryKey) {
-                _autoIncrementedPrimaryKey = column;
-            }
-            if (column.PrimaryKey) {
-                PrimaryKey = column;
-            }
-        }
-
-        if (PrimaryKey is not null) {
-            GetByPrimaryKeySql = $"select * from \"{TableName}\" where \"{PrimaryKey.Name}\" = ?";
-        }
-        else {
-            // People should not be calling Get/Find without a primary key
-            GetByPrimaryKeySql = $"select * from \"{TableName}\" limit 1";
-        }
-    }
-
-    public bool HasAutoIncrementedPrimaryKey => _autoIncrementedPrimaryKey is not null;
-    public void SetAutoIncrementedPrimaryKey(object obj, long id) {
-        _autoIncrementedPrimaryKey?.SetValue(obj, Convert.ChangeType(id, _autoIncrementedPrimaryKey.ColumnType));
-    }
-
-    public Column? FindColumnWithPropertyName(string propertyName) {
-        return Columns.FirstOrDefault(column => column.PropertyName == propertyName);
-    }
-    public Column? FindColumn(string columnName) {
-        if (Method is not MapMethod.ByName) {
-            throw new InvalidOperationException($"This {nameof(TableMapping)} is not mapped by name, but {Method}.");
-        }
-        return Columns.FirstOrDefault(column => column.Name.Equals(columnName, StringComparison.OrdinalIgnoreCase));
-    }
-
-    public class Column {
-        public string Name { get; }
-        public PropertyInfo? PropertyInfo => _memberInfo as PropertyInfo;
-        public string PropertyName { get => _memberInfo.Name; }
-        public Type ColumnType { get; }
-        public string Collation { get; }
-        public bool AutoIncrement { get; }
-        public bool AutoGuid { get; }
-        public bool PrimaryKey { get; }
-        public bool NotNull { get; }
-        public int? MaxStringLength { get; }
-        public bool StoreAsText { get; }
-        public IEnumerable<IndexedAttribute> Indices { get; }
-
-        private readonly MemberInfo _memberInfo;
-
-        public Column(MemberInfo member, CreateFlags createFlags = CreateFlags.None) {
-            _memberInfo = member;
-            Type memberType = GetMemberType(member);
-
-            Name = member.GetCustomAttribute<ColumnAttribute>()?.Name ?? member.Name;
-
-            // If this type is Nullable<T> then Nullable.GetUnderlyingType returns the T, otherwise it returns null, so get the actual type instead
-            ColumnType = Nullable.GetUnderlyingType(memberType) ?? memberType;
-            Collation = Orm.GetCollation(member);
-
-            PrimaryKey = Orm.IsPrimaryKey(member)
-                || (createFlags.HasFlag(CreateFlags.ImplicitPrimaryKey) && string.Equals(member.Name, Orm.ImplicitPrimaryKeyName, StringComparison.OrdinalIgnoreCase));
-
-            bool isAutoIncrement = Orm.IsAutoIncrement(member) || (PrimaryKey && ((createFlags & CreateFlags.AutoIncrementPrimaryKey) == CreateFlags.AutoIncrementPrimaryKey));
-            AutoGuid = isAutoIncrement && ColumnType == typeof(Guid);
-            AutoIncrement = isAutoIncrement && !AutoGuid;
-
-            Indices = Orm.GetIndices(member);
-            if (!Indices.Any() && !PrimaryKey && createFlags.HasFlag(CreateFlags.ImplicitIndex) && Name.EndsWith(Orm.ImplicitIndexSuffix, StringComparison.OrdinalIgnoreCase)) {
-                Indices = [new IndexedAttribute()];
-            }
-            NotNull = PrimaryKey || Orm.IsMarkedNotNull(member);
-            MaxStringLength = Orm.MaxStringLength(member);
-
-            StoreAsText = memberType.GetCustomAttribute<StoreByNameAttribute>() is not null;
-        }
-
-        public void SetValue(object obj, object? value) {
-            if (_memberInfo is PropertyInfo propertyInfo) {
-                if (value is not null && ColumnType.IsEnum) {
-                    propertyInfo.SetValue(obj, Enum.ToObject(ColumnType, value));
-                }
-                else {
-                    propertyInfo.SetValue(obj, value);
-                }
-            }
-            else if (_memberInfo is FieldInfo fieldInfo) {
-                if (value is not null && ColumnType.IsEnum) {
-                    fieldInfo.SetValue(obj, Enum.ToObject(ColumnType, value));
-                }
-                else {
-                    fieldInfo.SetValue(obj, value);
-                }
-            }
-            else {
-                throw new InvalidProgramException("Unreachable condition");
-            }
-        }
-        public object? GetValue(object obj) {
-            if (_memberInfo is PropertyInfo propertyInfo) {
-                return propertyInfo.GetValue(obj);
-            }
-            else if (_memberInfo is FieldInfo fieldInfo) {
-                return fieldInfo.GetValue(obj);
-            }
-            else {
-                throw new InvalidProgramException("Unreachable condition");
-            }
-        }
-        private static Type GetMemberType(MemberInfo memberInfo) {
-            return memberInfo switch {
-                PropertyInfo propertyInfo => propertyInfo.PropertyType,
-                FieldInfo fieldInfo => fieldInfo.FieldType,
-                _ => throw new InvalidProgramException($"{nameof(TableMapping)} only supports properties and fields."),
-            };
-        }
-    }
-
-    internal enum MapMethod {
-        ByName,
-        ByPosition
-    }
-}
-
 public static class Orm {
     public const string ImplicitPrimaryKeyName = "Id";
     public const string ImplicitIndexSuffix = "Id";
 
     public static string GetSqlDeclaration(TableMapping.Column column) {
-        string declaration = $"\"{column.Name}\" {GetSqlType(column)} ";
+        string declaration = $"{SQLiteConnection.Quote(column.Name)} {SQLiteConnection.Quote(GetSqlType(column))} collate {SQLiteConnection.Quote(column.Collation)} ";
 
         if (column.PrimaryKey) {
             declaration += "primary key ";
@@ -175,14 +21,11 @@ public static class Orm {
         if (column.NotNull) {
             declaration += "not null ";
         }
-        if (!string.IsNullOrEmpty(column.Collation)) {
-            declaration += "collate " + column.Collation + " ";
-        }
 
         return declaration;
     }
     public static string GetSqlType(TableMapping.Column column) {
-        Type clrType = column.ColumnType;
+        Type clrType = column.Type;
         if (clrType == typeof(bool) || clrType == typeof(byte) || clrType == typeof(sbyte) || clrType == typeof(short) || clrType == typeof(ushort) || clrType == typeof(int) || clrType == typeof(uint) || clrType == typeof(long) || clrType == typeof(ulong)) {
             return "integer";
         }
@@ -224,7 +67,7 @@ public static class Orm {
         return memberInfo.GetCustomAttribute<AutoIncrementAttribute>() is not null;
     }
     public static string GetCollation(MemberInfo memberInfo) {
-		return memberInfo.GetCustomAttribute<CollationAttribute>()?.Value ?? "";
+		return memberInfo.GetCustomAttribute<CollationAttribute>()?.Value ?? CollationType.Binary;
     }
 
     public static IEnumerable<IndexedAttribute> GetIndices(MemberInfo memberInfo) {
@@ -251,23 +94,23 @@ public partial class SQLiteCommand(SQLiteConnection conn) {
         }
 
         Sqlite3Statement statement = Prepare();
-        SQLiteInterop.Result result = SQLiteInterop.Step(statement);
-        SQLiteInterop.Finalize(statement);
+        SQLiteRaw.Result result = SQLiteRaw.Step(statement);
+        SQLiteRaw.Finalize(statement);
 
-        if (result is SQLiteInterop.Result.Done) {
-            int rowCount = SQLiteInterop.Changes(_conn.Handle!);
+        if (result is SQLiteRaw.Result.Done) {
+            int rowCount = SQLiteRaw.Changes(_conn.Handle);
             return rowCount;
         }
-        else if (result is SQLiteInterop.Result.Error) {
-            string msg = SQLiteInterop.GetErrmsg(_conn.Handle!);
+        else if (result is SQLiteRaw.Result.Error) {
+            string msg = SQLiteRaw.GetErrorMessage(_conn.Handle);
             throw new SQLiteException(result, msg);
         }
-        else if (result is SQLiteInterop.Result.Constraint) {
-            if (SQLiteInterop.ExtendedErrCode(_conn.Handle!) is SQLiteInterop.ExtendedResult.ConstraintNotNull) {
-                throw new NotNullConstraintViolationException(result, SQLiteInterop.GetErrmsg(_conn.Handle!));
+        else if (result is SQLiteRaw.Result.Constraint) {
+            if (SQLiteRaw.GetExtendedErrorCode(_conn.Handle) is SQLiteRaw.ExtendedResult.ConstraintNotNull) {
+                throw new NotNullConstraintViolationException(result, SQLiteRaw.GetErrorMessage(_conn.Handle));
             }
         }
-        throw new SQLiteException(result, SQLiteInterop.GetErrmsg(_conn.Handle!));
+        throw new SQLiteException(result, SQLiteRaw.GetErrorMessage(_conn.Handle));
     }
 
     /// <summary>
@@ -279,9 +122,7 @@ public partial class SQLiteCommand(SQLiteConnection conn) {
     /// <remarks>
     /// This can be overridden in combination with the <see cref="SQLiteConnection.NewCommand"/> method to hook into the life-cycle of objects.
     /// </remarks>
-    protected virtual void OnInstanceCreated(object obj) {
-        // Can be overridden.
-    }
+    protected virtual void OnInstanceCreated(object obj) { }
 
     public IEnumerable<T> ExecuteQuery<T>(TableMapping map) {
         if (_conn.Trace) {
@@ -290,56 +131,29 @@ public partial class SQLiteCommand(SQLiteConnection conn) {
 
         Sqlite3Statement statement = Prepare();
         try {
-            TableMapping.Column?[] columns = new TableMapping.Column[SQLiteInterop.ColumnCount(statement)];
-            Action<object, Sqlite3Statement, int>?[] fastColumnSetters = new Action<object, Sqlite3Statement, int>?[SQLiteInterop.ColumnCount(statement)];
-
-            if (map.Method is TableMapping.MapMethod.ByPosition) {
-                Array.Copy(map.Columns, columns, Math.Min(columns.Length, map.Columns.Length));
-            }
-            else if (map.Method is TableMapping.MapMethod.ByName) {
-                MethodInfo? getSetter = null;
-                if (typeof(T) != map.MappedType) {
-                    getSetter = typeof(FastColumnSetter)
-                        .GetMethod(nameof(FastColumnSetter.GetFastSetter), BindingFlags.NonPublic | BindingFlags.Static)!
-                        .MakeGenericMethod(map.MappedType);
-                }
-
-                for (int i = 0; i < columns.Length; i++) {
-                    string name = SQLiteInterop.ColumnName16(statement, i);
-                    columns[i] = map.FindColumn(name);
-                    if (columns[i] is TableMapping.Column column) {
-                        if (getSetter is not null) {
-                            fastColumnSetters[i] = (Action<object, Sqlite3Statement, int>)getSetter.Invoke(null, [column])!;
-                        }
-                        else {
-                            fastColumnSetters[i] = FastColumnSetter.GetFastSetter<T>(column);
-                        }
-                    }
-                }
-            }
-
-            while (SQLiteInterop.Step(statement) is SQLiteInterop.Result.Row) {
+            while (SQLiteRaw.Step(statement) is SQLiteRaw.Result.Row) {
                 object obj = Activator.CreateInstance(map.MappedType)!;
-                for (int i = 0; i < columns.Length; i++) {
-                    if (columns[i] is not TableMapping.Column column) {
+
+                // Iterate through found columns
+                int columnCount = SQLiteRaw.GetColumnCount(statement);
+                for (int i = 0; i < columnCount; i++) {
+                    // Get name of found column
+                    string columnName = SQLiteRaw.GetColumnName(statement, i);
+                    // Find mapped column with same name
+                    if (map.FindColumnByColumnName(columnName) is not TableMapping.Column column) {
                         continue;
                     }
-
-                    if (fastColumnSetters[i] is Action<object, Sqlite3Statement, int> fastColumnSetter) {
-                        fastColumnSetter.Invoke(obj, statement, i);
-                    }
-                    else {
-                        SQLiteInterop.ColType columnType = SQLiteInterop.ColumnType(statement, i);
-                        object? value = ReadCol(statement, i, columnType, column.ColumnType);
-                        column.SetValue(obj, value);
-                    }
+                    // Read value from found column
+                    SQLiteRaw.ColumnType columnType = SQLiteRaw.GetColumnType(statement, i);
+                    object? value = ReadColumn(statement, i, columnType, column.Type);
+                    column.SetValue(obj, value);
                 }
                 OnInstanceCreated(obj);
                 yield return (T)obj;
             }
         }
         finally {
-            SQLiteInterop.Finalize(statement);
+            SQLiteRaw.Finalize(statement);
         }
     }
     public IEnumerable<T> ExecuteQuery<T>() {
@@ -356,22 +170,22 @@ public partial class SQLiteCommand(SQLiteConnection conn) {
         Sqlite3Statement stmt = Prepare();
 
         try {
-            SQLiteInterop.Result result = SQLiteInterop.Step(stmt);
-            if (result is SQLiteInterop.Result.Row) {
-                SQLiteInterop.ColType columnType = SQLiteInterop.ColumnType(stmt, 0);
-                object? columnValue = ReadCol(stmt, 0, columnType, typeof(T));
+            SQLiteRaw.Result result = SQLiteRaw.Step(stmt);
+            if (result is SQLiteRaw.Result.Row) {
+                SQLiteRaw.ColumnType columnType = SQLiteRaw.GetColumnType(stmt, 0);
+                object? columnValue = ReadColumn(stmt, 0, columnType, typeof(T));
                 if (columnValue is not null) {
                     Value = (T)columnValue;
                 }
             }
-            else if (result is SQLiteInterop.Result.Done) {
+            else if (result is SQLiteRaw.Result.Done) {
             }
             else {
-                throw new SQLiteException(result, SQLiteInterop.GetErrmsg(_conn.Handle!));
+                throw new SQLiteException(result, SQLiteRaw.GetErrorMessage(_conn.Handle));
             }
         }
         finally {
-            SQLiteInterop.Finalize(stmt);
+            SQLiteRaw.Finalize(stmt);
         }
 
         return Value;
@@ -383,12 +197,12 @@ public partial class SQLiteCommand(SQLiteConnection conn) {
         }
         Sqlite3Statement statement = Prepare();
         try {
-            if (SQLiteInterop.ColumnCount(statement) < 1) {
+            if (SQLiteRaw.GetColumnCount(statement) < 1) {
                 throw new InvalidOperationException("QueryScalars should return at least one column");
             }
-            while (SQLiteInterop.Step(statement) == SQLiteInterop.Result.Row) {
-                SQLiteInterop.ColType colType = SQLiteInterop.ColumnType(statement, 0);
-                object? value = ReadCol(statement, 0, colType, typeof(T));
+            while (SQLiteRaw.Step(statement) == SQLiteRaw.Result.Row) {
+                SQLiteRaw.ColumnType colType = SQLiteRaw.GetColumnType(statement, 0);
+                object? value = ReadColumn(statement, 0, colType, typeof(T));
                 if (value is null) {
                     yield return default!;
                 }
@@ -398,7 +212,7 @@ public partial class SQLiteCommand(SQLiteConnection conn) {
             }
         }
         finally {
-            SQLiteInterop.Finalize(statement);
+            SQLiteRaw.Finalize(statement);
         }
     }
 
@@ -424,7 +238,7 @@ public partial class SQLiteCommand(SQLiteConnection conn) {
     }
 
     private Sqlite3Statement Prepare() {
-        Sqlite3Statement stmt = SQLiteInterop.Prepare2(_conn.Handle!, CommandText);
+        Sqlite3Statement stmt = SQLiteRaw.Prepare2(_conn.Handle, CommandText);
         BindAll(stmt);
         return stmt;
     }
@@ -433,7 +247,7 @@ public partial class SQLiteCommand(SQLiteConnection conn) {
         int nextIndex = 1;
         foreach (Binding binding in _bindings) {
             if (binding.Name is not null) {
-                binding.Index = SQLiteInterop.BindParameterIndex(stmt, binding.Name);
+                binding.Index = SQLiteRaw.BindParameterIndex(stmt, binding.Name);
             }
             else {
                 binding.Index = nextIndex++;
@@ -444,51 +258,51 @@ public partial class SQLiteCommand(SQLiteConnection conn) {
 
     internal static void BindParameter(Sqlite3Statement stmt, int index, object? value) {
         if (value is null) {
-            SQLiteInterop.BindNull(stmt, index);
+            SQLiteRaw.BindNull(stmt, index);
         }
         else {
             if (value is int intValue) {
-                SQLiteInterop.BindInt(stmt, index, intValue);
+                SQLiteRaw.BindInt(stmt, index, intValue);
             }
             else if (value is string stringValue) {
-                SQLiteInterop.BindText(stmt, index, stringValue);
+                SQLiteRaw.BindText(stmt, index, stringValue);
             }
             else if (value is byte or sbyte or ushort or ushort) {
-                SQLiteInterop.BindInt(stmt, index, Convert.ToInt32(value));
+                SQLiteRaw.BindInt(stmt, index, Convert.ToInt32(value));
             }
             else if (value is bool boolValue) {
-                SQLiteInterop.BindInt(stmt, index, boolValue ? 1 : 0);
+                SQLiteRaw.BindInt(stmt, index, boolValue ? 1 : 0);
             }
             else if (value is uint or long or ulong) {
-                SQLiteInterop.BindInt64(stmt, index, Convert.ToInt64(value));
+                SQLiteRaw.BindInt64(stmt, index, Convert.ToInt64(value));
             }
             else if (value is float or double or decimal) {
-                SQLiteInterop.BindDouble(stmt, index, Convert.ToDouble(value));
+                SQLiteRaw.BindDouble(stmt, index, Convert.ToDouble(value));
             }
             else if (value is TimeSpan timeSpanValue) {
-                SQLiteInterop.BindInt64(stmt, index, timeSpanValue.Ticks);
+                SQLiteRaw.BindInt64(stmt, index, timeSpanValue.Ticks);
             }
             else if (value is DateTime dateTimeValue) {
-                SQLiteInterop.BindInt64(stmt, index, dateTimeValue.Ticks);
+                SQLiteRaw.BindInt64(stmt, index, dateTimeValue.Ticks);
             }
             else if (value is DateTimeOffset dateTimeOffsetValue) {
-                SQLiteInterop.BindBlob(stmt, index, DateTimeOffsetToBytes(dateTimeOffsetValue));
+                SQLiteRaw.BindBlob(stmt, index, DateTimeOffsetToBytes(dateTimeOffsetValue));
             }
             else if (value is byte[] byteArrayValue) {
-                SQLiteInterop.BindBlob(stmt, index, byteArrayValue);
+                SQLiteRaw.BindBlob(stmt, index, byteArrayValue);
             }
             else if (value is Guid or StringBuilder or Uri or UriBuilder) {
-                SQLiteInterop.BindText(stmt, index, value.ToString()!);
+                SQLiteRaw.BindText(stmt, index, value.ToString()!);
             }
             else {
                 // Now we could possibly get an enum, retrieve cached info
                 Type valueType = value.GetType();
                 if (valueType.IsEnum) {
                     if (valueType.GetCustomAttribute<StoreByNameAttribute>() is not null) {
-                        SQLiteInterop.BindText(stmt, index, Enum.GetName(valueType, value)!);
+                        SQLiteRaw.BindText(stmt, index, Enum.GetName(valueType, value)!);
                     }
                     else {
-                        SQLiteInterop.BindInt(stmt, index, Convert.ToInt32(value));
+                        SQLiteRaw.BindInt(stmt, index, Convert.ToInt32(value));
                     }
                 }
                 else {
@@ -504,8 +318,8 @@ public partial class SQLiteCommand(SQLiteConnection conn) {
         public int Index { get; set; }
     }
 
-    private static object? ReadCol(Sqlite3Statement stmt, int index, SQLiteInterop.ColType type, Type clrType) {
-        if (type is SQLiteInterop.ColType.Null) {
+    private static object? ReadColumn(Sqlite3Statement stmt, int index, SQLiteRaw.ColumnType type, Type clrType) {
+        if (type is SQLiteRaw.ColumnType.Null) {
             return null;
         }
         else {
@@ -514,79 +328,79 @@ public partial class SQLiteCommand(SQLiteConnection conn) {
             }
 
             if (clrType == typeof(string)) {
-                return SQLiteInterop.ColumnString(stmt, index);
+                return SQLiteRaw.GetColumnText(stmt, index);
             }
             else if (clrType == typeof(int)) {
-                return (int)SQLiteInterop.ColumnInt(stmt, index);
+                return SQLiteRaw.GetColumnInt(stmt, index);
             }
             else if (clrType == typeof(bool)) {
-                return SQLiteInterop.ColumnInt(stmt, index) == 1;
+                return SQLiteRaw.GetColumnInt(stmt, index) == 1;
             }
             else if (clrType == typeof(double)) {
-                return SQLiteInterop.ColumnDouble(stmt, index);
+                return SQLiteRaw.GetColumnDouble(stmt, index);
             }
             else if (clrType == typeof(float)) {
-                return (float)SQLiteInterop.ColumnDouble(stmt, index);
+                return (float)SQLiteRaw.GetColumnDouble(stmt, index);
             }
             else if (clrType == typeof(TimeSpan)) {
-                return new TimeSpan(SQLiteInterop.ColumnInt64(stmt, index));
+                return new TimeSpan(SQLiteRaw.GetColumnInt64(stmt, index));
             }
             else if (clrType == typeof(DateTime)) {
-                return new DateTime(SQLiteInterop.ColumnInt64(stmt, index));
+                return new DateTime(SQLiteRaw.GetColumnInt64(stmt, index));
             }
             else if (clrType == typeof(DateTimeOffset)) {
-                return BytesToDateTimeOffset(SQLiteInterop.ColumnBlob(stmt, index));
+                return BytesToDateTimeOffset(SQLiteRaw.GetColumnBlob(stmt, index));
             }
             else if (clrType.IsEnum) {
-                if (type is SQLiteInterop.ColType.Text) {
-                    string value = SQLiteInterop.ColumnString(stmt, index);
+                if (type is SQLiteRaw.ColumnType.Text) {
+                    string value = SQLiteRaw.GetColumnText(stmt, index);
                     return Enum.Parse(clrType, value, true);
                 }
                 else {
-                    return SQLiteInterop.ColumnInt(stmt, index);
+                    return SQLiteRaw.GetColumnInt(stmt, index);
                 }
             }
             else if (clrType == typeof(long)) {
-                return SQLiteInterop.ColumnInt64(stmt, index);
+                return SQLiteRaw.GetColumnInt64(stmt, index);
             }
             else if (clrType == typeof(ulong)) {
-                return (ulong)SQLiteInterop.ColumnInt64(stmt, index);
+                return (ulong)SQLiteRaw.GetColumnInt64(stmt, index);
             }
             else if (clrType == typeof(uint)) {
-                return (uint)SQLiteInterop.ColumnInt64(stmt, index);
+                return (uint)SQLiteRaw.GetColumnInt64(stmt, index);
             }
             else if (clrType == typeof(decimal)) {
-                return (decimal)SQLiteInterop.ColumnDouble(stmt, index);
+                return (decimal)SQLiteRaw.GetColumnDouble(stmt, index);
             }
             else if (clrType == typeof(byte)) {
-                return (byte)SQLiteInterop.ColumnInt(stmt, index);
+                return (byte)SQLiteRaw.GetColumnInt(stmt, index);
             }
             else if (clrType == typeof(ushort)) {
-                return (ushort)SQLiteInterop.ColumnInt(stmt, index);
+                return (ushort)SQLiteRaw.GetColumnInt(stmt, index);
             }
             else if (clrType == typeof(short)) {
-                return (short)SQLiteInterop.ColumnInt(stmt, index);
+                return (short)SQLiteRaw.GetColumnInt(stmt, index);
             }
             else if (clrType == typeof(sbyte)) {
-                return (sbyte)SQLiteInterop.ColumnInt(stmt, index);
+                return (sbyte)SQLiteRaw.GetColumnInt(stmt, index);
             }
             else if (clrType == typeof(byte[])) {
-                return SQLiteInterop.ColumnBlob(stmt, index);
+                return SQLiteRaw.GetColumnBlob(stmt, index);
             }
             else if (clrType == typeof(Guid)) {
-                string text = SQLiteInterop.ColumnString(stmt, index);
+                string text = SQLiteRaw.GetColumnText(stmt, index);
                 return new Guid(text);
             }
             else if (clrType == typeof(Uri)) {
-                string text = SQLiteInterop.ColumnString(stmt, index);
+                string text = SQLiteRaw.GetColumnText(stmt, index);
                 return new Uri(text);
             }
             else if (clrType == typeof(StringBuilder)) {
-                string text = SQLiteInterop.ColumnString(stmt, index);
+                string text = SQLiteRaw.GetColumnText(stmt, index);
                 return new StringBuilder(text);
             }
             else if (clrType == typeof(UriBuilder)) {
-                string text = SQLiteInterop.ColumnString(stmt, index);
+                string text = SQLiteRaw.GetColumnText(stmt, index);
                 return new UriBuilder(text);
             }
             else {
@@ -605,206 +419,6 @@ public partial class SQLiteCommand(SQLiteConnection conn) {
             .. BitConverter.GetBytes(dateTimeOffset.DateTime.Ticks),
             .. BitConverter.GetBytes(dateTimeOffset.Offset.Ticks)
         ];
-    }
-}
-
-internal class FastColumnSetter {
-    /// <summary>
-    /// Creates a delegate that can be used to quickly set object members from query columns.
-    ///
-    /// Note that this frontloads the slow reflection-based type checking for columns to only happen once at the beginning of a query,
-    /// and then afterwards each row of the query can invoke the delegate returned by this function to get much better performance (up to 10x speed boost, depending on query size and platform).
-    /// </summary>
-    /// <typeparam name="T">The type of the destination object that the query will read into</typeparam>
-    /// <param name="conn">The active connection.  Note that this is primarily needed in order to read preferences regarding how certain data types (such as TimeSpan / DateTime) should be encoded in the database.</param>
-    /// <param name="column">The table mapping used to map the statement column to a member of the destination object type</param>
-    /// <returns>
-    /// A delegate for fast-setting of object members from statement columns.
-    ///
-    /// If no fast setter is available for the requested column (enums in particular cause headache), then this function returns null.
-    /// </returns>
-    internal static Action<object, Sqlite3Statement, int>? GetFastSetter<T>(TableMapping.Column column) {
-        Type clrType = column.PropertyInfo!.PropertyType;
-
-        if (Nullable.GetUnderlyingType(clrType) is Type underlyingType) {
-            clrType = underlyingType;
-        }
-
-        if (clrType == typeof(string)) {
-            return CreateTypedSetterDelegate<T, string>(column, (stmt, index) => {
-                return SQLiteInterop.ColumnString(stmt, index);
-            });
-        }
-        else if (clrType == typeof(int)) {
-            return CreateNullableTypedSetterDelegate<T, int>(column, (stmt, index) => {
-                return SQLiteInterop.ColumnInt(stmt, index);
-            });
-        }
-        else if (clrType == typeof(bool)) {
-            return CreateNullableTypedSetterDelegate<T, bool>(column, (stmt, index) => {
-                return SQLiteInterop.ColumnInt(stmt, index) == 1;
-            });
-        }
-        else if (clrType == typeof(double)) {
-            return CreateNullableTypedSetterDelegate<T, double>(column, (stmt, index) => {
-                return SQLiteInterop.ColumnDouble(stmt, index);
-            });
-        }
-        else if (clrType == typeof(float)) {
-            return CreateNullableTypedSetterDelegate<T, float>(column, (stmt, index) => {
-                return (float)SQLiteInterop.ColumnDouble(stmt, index);
-            });
-        }
-        else if (clrType == typeof(TimeSpan)) {
-            return CreateNullableTypedSetterDelegate<T, TimeSpan>(column, (stmt, index) => {
-                return new TimeSpan(SQLiteInterop.ColumnInt64(stmt, index));
-            });
-        }
-        else if (clrType == typeof(DateTime)) {
-            return CreateNullableTypedSetterDelegate<T, DateTime>(column, (stmt, index) => {
-                return new DateTime(SQLiteInterop.ColumnInt64(stmt, index));
-            });
-        }
-        else if (clrType == typeof(DateTimeOffset)) {
-            return CreateNullableTypedSetterDelegate<T, DateTimeOffset>(column, (stmt, index) => {
-                return SQLiteCommand.BytesToDateTimeOffset(SQLiteInterop.ColumnBlob(stmt, index));
-            });
-        }
-        else if (clrType.IsEnum) {
-            // NOTE: Not sure of a good way (if any?) to do a strongly-typed fast setter like this for enumerated types -- for now, return null and column sets will revert back to the safe (but slow) Reflection-based method of column prop.Set()
-        }
-        else if (clrType == typeof(long)) {
-            return CreateNullableTypedSetterDelegate<T, long>(column, (stmt, index) => {
-                return SQLiteInterop.ColumnInt64(stmt, index);
-            });
-        }
-        else if (clrType == typeof(ulong)) {
-            return CreateNullableTypedSetterDelegate<T, ulong>(column, (stmt, index) => {
-                return (ulong)SQLiteInterop.ColumnInt64(stmt, index);
-            });
-        }
-        else if (clrType == typeof(uint)) {
-            return CreateNullableTypedSetterDelegate<T, uint>(column, (stmt, index) => {
-                return (uint)SQLiteInterop.ColumnInt64(stmt, index);
-            });
-        }
-        else if (clrType == typeof(decimal)) {
-            return CreateNullableTypedSetterDelegate<T, decimal>(column, (stmt, index) => {
-                return (decimal)SQLiteInterop.ColumnDouble(stmt, index);
-            });
-        }
-        else if (clrType == typeof(byte)) {
-            return CreateNullableTypedSetterDelegate<T, byte>(column, (stmt, index) => {
-                return (byte)SQLiteInterop.ColumnInt(stmt, index);
-            });
-        }
-        else if (clrType == typeof(ushort)) {
-            return CreateNullableTypedSetterDelegate<T, ushort>(column, (stmt, index) => {
-                return (ushort)SQLiteInterop.ColumnInt(stmt, index);
-            });
-        }
-        else if (clrType == typeof(short)) {
-            return CreateNullableTypedSetterDelegate<T, short>(column, (stmt, index) => {
-                return (short)SQLiteInterop.ColumnInt(stmt, index);
-            });
-        }
-        else if (clrType == typeof(sbyte)) {
-            return CreateNullableTypedSetterDelegate<T, sbyte>(column, (stmt, index) => {
-                return (sbyte)SQLiteInterop.ColumnInt(stmt, index);
-            });
-        }
-        else if (clrType == typeof(byte[])) {
-            return CreateTypedSetterDelegate<T, byte[]>(column, (stmt, index) => {
-                return SQLiteInterop.ColumnBlob(stmt, index);
-            });
-        }
-        else if (clrType == typeof(Guid)) {
-            return CreateNullableTypedSetterDelegate<T, Guid>(column, (stmt, index) => {
-                string text = SQLiteInterop.ColumnString(stmt, index);
-                return new Guid(text);
-            });
-        }
-        else if (clrType == typeof(StringBuilder)) {
-            return CreateTypedSetterDelegate<T, StringBuilder>(column, (stmt, index) => {
-                string text = SQLiteInterop.ColumnString(stmt, index);
-                return new StringBuilder(text);
-            });
-        }
-        else if (clrType == typeof(Uri)) {
-            return CreateTypedSetterDelegate<T, Uri>(column, (stmt, index) => {
-                string text = SQLiteInterop.ColumnString(stmt, index);
-                return new Uri(text);
-            });
-        }
-        else if (clrType == typeof(UriBuilder)) {
-            return CreateTypedSetterDelegate<T, UriBuilder>(column, (stmt, index) => {
-                string text = SQLiteInterop.ColumnString(stmt, index);
-                return new UriBuilder(text);
-            });
-        }
-        else {
-            // NOTE: Will fall back to the slow setter method in the event that we are unable to create a fast setter delegate for a particular column type
-        }
-        return null;
-    }
-
-    /// <summary>
-    /// This creates a strongly typed delegate that will permit fast setting of column values given a Sqlite3Statement and a column index.
-    ///
-    /// Note that this is identical to CreateTypedSetterDelegate(), but has an extra check to see if it should create a nullable version of the delegate.
-    /// </summary>
-    /// <typeparam name="ObjectType">The type of the object whose member column is being set</typeparam>
-    /// <typeparam name="ColumnMemberType">The CLR type of the member in the object which corresponds to the given SQLite columnn</typeparam>
-    /// <param name="column">The column mapping that identifies the target member of the destination object</param>
-    /// <param name="getColumnValue">A lambda that can be used to retrieve the column value at query-time</param>
-    /// <returns>A strongly-typed delegate</returns>
-    private static Action<object, Sqlite3Statement, int> CreateNullableTypedSetterDelegate<ObjectType, ColumnMemberType>(TableMapping.Column column, Func<Sqlite3Statement, int, ColumnMemberType> getColumnValue) where ColumnMemberType : struct {
-        Type clrType = column.PropertyInfo!.PropertyType;
-        bool isNullable = false;
-
-        if (Nullable.GetUnderlyingType(clrType) is not null) {
-            isNullable = true;
-        }
-
-        if (isNullable) {
-            Action<ObjectType, ColumnMemberType?> setProperty = (Action<ObjectType, ColumnMemberType?>)Delegate.CreateDelegate(
-                typeof(Action<ObjectType, ColumnMemberType?>),
-                null,
-                column.PropertyInfo.GetSetMethod()!
-            );
-
-            return (obj, stmt, i) => {
-                SQLiteInterop.ColType colType = SQLiteInterop.ColumnType(stmt, i);
-                if (colType is not SQLiteInterop.ColType.Null) {
-                    setProperty.Invoke((ObjectType)obj, getColumnValue.Invoke(stmt, i));
-                }
-            };
-        }
-
-        return CreateTypedSetterDelegate<ObjectType, ColumnMemberType>(column, getColumnValue);
-    }
-
-    /// <summary>
-    /// This creates a strongly typed delegate that will permit fast setting of column values given a Sqlite3Statement and a column index.
-    /// </summary>
-    /// <typeparam name="ObjectType">The type of the object whose member column is being set</typeparam>
-    /// <typeparam name="ColumnMemberType">The CLR type of the member in the object which corresponds to the given SQLite columnn</typeparam>
-    /// <param name="column">The column mapping that identifies the target member of the destination object</param>
-    /// <param name="getColumnValue">A lambda that can be used to retrieve the column value at query-time</param>
-    /// <returns>A strongly-typed delegate</returns>
-    private static Action<object, Sqlite3Statement, int> CreateTypedSetterDelegate<ObjectType, ColumnMemberType>(TableMapping.Column column, Func<Sqlite3Statement, int, ColumnMemberType> getColumnValue) {
-        Action<ObjectType, ColumnMemberType> setProperty = (Action<ObjectType, ColumnMemberType>)Delegate.CreateDelegate(
-            typeof(Action<ObjectType, ColumnMemberType>),
-            null,
-            column.PropertyInfo!.GetSetMethod()!
-        );
-
-        return (obj, stmt, i) => {
-            SQLiteInterop.ColType colType = SQLiteInterop.ColumnType(stmt, i);
-            if (colType != SQLiteInterop.ColType.Null) {
-                setProperty.Invoke((ObjectType)obj, getColumnValue.Invoke(stmt, i));
-            }
-        };
     }
 }
 
@@ -955,7 +569,7 @@ public class TableQuery<T> : BaseTableQuery, IEnumerable<T> {
         if (memberExpression is not null && memberExpression.Expression?.NodeType is ExpressionType.Parameter) {
             TableQuery<T> query = Clone<T>();
             query._orderBys ??= [];
-            query._orderBys.Add(new Ordering(Table.FindColumnWithPropertyName(memberExpression.Member.Name)!.Name, ascending));
+            query._orderBys.Add(new Ordering(Table.FindColumnByMemberName(memberExpression.Member.Name)!.Name, ascending));
             return query;
         }
         else {
@@ -1153,7 +767,7 @@ public class TableQuery<T> : BaseTableQuery, IEnumerable<T> {
             if (parameterExpression is not null) {
                 // This is a column of our table, output just the column name
                 // Need to translate it if that column name is mapped
-                string columnName = Table.FindColumnWithPropertyName(memberExpression.Member.Name)!.Name;
+                string columnName = Table.FindColumnByMemberName(memberExpression.Member.Name)!.Name;
                 return new CompileResult() {
                     CommandText = $"\"{columnName}\""
                 };

@@ -2,6 +2,7 @@
 using System.Diagnostics;
 using System.Reflection;
 using System.Linq.Expressions;
+using System.Collections.Concurrent;
 
 namespace SQLiteSharp;
 
@@ -9,19 +10,15 @@ namespace SQLiteSharp;
 /// An open connection to a SQLite database.
 /// </summary>
 public partial class SQLiteConnection : IDisposable {
-    private readonly static Dictionary<string, TableMapping> _mappings = [];
+    public ConcurrentDictionary<Type, TableMapping> Mappings { get; } = [];
 
-    private bool _open;
+    public Sqlite3DatabaseHandle Handle { get; }
+
+    public event EventHandler<NotifyTableChangedEventArgs>? OnTableChanged;
+
     private TimeSpan _busyTimeout;
     private Stopwatch? _stopwatch;
     private long _elapsedMilliseconds = 0;
-
-    private int _transactionDepth = 0;
-    private readonly Random _rand = new();
-
-    public Sqlite3DatabaseHandle? Handle { get; private set; }
-
-    public event EventHandler<NotifyTableChangedEventArgs>? OnTableChanged;
 
     /// <summary>
     /// The database path used by this connection.
@@ -41,6 +38,9 @@ public partial class SQLiteConnection : IDisposable {
     /// <value>The tracer.</value>
     public Action<string> Tracer { get; set; }
 
+    /// <summary>
+    /// Setup the SQLite Portable Class Library.
+    /// </summary>
     static SQLiteConnection() {
         SQLitePCL.Batteries_V2.Init();
     }
@@ -71,34 +71,25 @@ public partial class SQLiteConnection : IDisposable {
 
         DatabasePath = connectionString.DatabasePath;
 
-        SQLiteInterop.Result result = SQLiteInterop.Open(connectionString.DatabasePath, out Sqlite3DatabaseHandle handle, connectionString.OpenFlags, null);
+        SQLiteRaw.Result result = SQLiteRaw.Open(connectionString.DatabasePath, out Sqlite3DatabaseHandle handle, connectionString.OpenFlags, null);
         Handle = handle;
 
-        if (result is not SQLiteInterop.Result.OK) {
+        if (result is not SQLiteRaw.Result.OK) {
             throw new SQLiteException(result, $"Could not open database file: {DatabasePath} ({result})");
         }
-        _open = true;
 
         BusyTimeout = TimeSpan.FromSeconds(1.0);
         Tracer = line => Debug.WriteLine(line);
 
-        connectionString.PreKeyAction?.Invoke(this);
-        if (connectionString.Key is string stringKey) {
-            SetKey(stringKey);
+        if (connectionString.Key is not null) {
+            SetKey(connectionString.Key);
         }
-        else if (connectionString.Key is byte[] bytesKey) {
-            SetKey(bytesKey);
-        }
-        else if (connectionString.Key is not null) {
-            throw new InvalidOperationException("Encryption key must be string or byte array");
-        }
-        connectionString.PostKeyAction?.Invoke(this);
     }
 
     /// <summary>
     /// The SQLite library version number. <c>3007014</c> refers to <c>v3.7.14</c>.
     /// </summary>
-    public int SQLiteVersionNumber => SQLiteInterop.LibVersionNumber();
+    public static int SQLiteVersionNumber => SQLiteRaw.LibVersionNumber();
 
     /// <summary>
     /// Enables the write ahead logging. WAL is significantly faster in most scenarios
@@ -110,72 +101,37 @@ public partial class SQLiteConnection : IDisposable {
     }
 
     /// <summary>
-    /// Convert an input string to a quoted SQL string that can be safely used in queries.
+    /// Convert an input string to a quoted SQL string that can be safely used in queries.<br/>
+    /// For example, <c>red 'blue' green</c> becomes <c>'red ''blue'' green'</c>.
     /// </summary>
-    /// <returns>The quoted string.</returns>
-    /// <param name="unsafeString">The unsafe string to quote.</param>
-    static string Quote(string? unsafeString) {
-        // TODO: Doesn't call sqlite3_mprintf("%Q", u) because we're waiting on https://github.com/ericsink/SQLitePCL.raw/issues/153
+    public static string Quote(string? unsafeString) {
         if (unsafeString is null) {
-            return "NULL";
+            return "null";
         }
-        string safe = unsafeString.Replace("'", "''");
-        return "'" + safe + "'";
+        return $"'{unsafeString.Replace("'", "''")}'";
     }
 
     /// <summary>
-    /// Sets the key used to encrypt/decrypt the database with "pragma key = ...".
-    /// This must be the first thing you call before doing anything else with this connection
-    /// if your database is encrypted.
-    /// This only has an effect if you are using the SQLCipher nuget package.
+    /// Sets the 256-bit (32-byte) key used to encrypt/decrypt the database.<br/>
+    /// This must be the first thing you call before doing anything else with this connection if your database is encrypted.
     /// </summary>
-    /// <param name="key">Encryption key plain text that is converted to the real encryption key using PBKDF2 key derivation</param>
-    void SetKey(string key) {
-        string quotedKey = Quote(key);
-        ExecuteScalar<string>("pragma key = " + quotedKey);
+    public void SetKey(byte[] key) {
+        SQLiteRaw.SetKey(Handle, key);
     }
-
     /// <summary>
-    /// Sets the key used to encrypt/decrypt the database.
-    /// This must be the first thing you call before doing anything else with this connection
-    /// if your database is encrypted.
-    /// This only has an effect if you are using the SQLCipher nuget package.
+    /// Changes the 256-bit (32-byte) encryption key used to encrypt/decrypt the database.
     /// </summary>
-    /// <param name="key">256-bit (32 byte) encryption key data</param>
-    void SetKey(byte[] key) {
-        if (key.Length != 32 && key.Length != 48)
-            throw new ArgumentException("Key must be 32 bytes (256-bit) or 48 bytes (384-bit)", nameof(key));
-        string keyHexString = string.Concat(key.Select(x => x.ToString("X2")));
-        ExecuteScalar<string>("pragma key = \"x'" + keyHexString + "'\"");
-    }
-
-    /// <summary>
-    /// Change the encryption key for a SQLCipher database with "pragma rekey = ...".
-    /// </summary>
-    /// <param name="key">Encryption key plain text that is converted to the real encryption key using PBKDF2 key derivation</param>
-    public void ReKey(string key) {
-        string quotedKey = Quote(key);
-        ExecuteScalar<string>("pragma rekey = " + quotedKey);
-    }
-
-    /// <summary>
-    /// Change the encryption key for a SQLCipher database.
-    /// </summary>
-    /// <param name="key">256-bit (32 byte) or 384-bit (48 bytes) encryption key data</param>
-    public void ReKey(byte[] key) {
-        if (key.Length != 32 && key.Length != 48)
-            throw new ArgumentException("Key must be 32 bytes (256-bit) or 48 bytes (384-bit)", nameof(key));
-        string keyHexString = string.Concat(key.Select(x => x.ToString("X2")));
-        ExecuteScalar<string>("pragma rekey = \"x'" + keyHexString + "'\"");
+    public void ChangeKey(byte[] key) {
+        SQLiteRaw.ChangeKey(Handle, key);
     }
 
     /// <summary>
     /// Enable or disable extension loading.
     /// </summary>
     public void EnableLoadExtension(bool enabled) {
-        SQLiteInterop.Result result = SQLiteInterop.EnableLoadExtension(Handle!, enabled ? 1 : 0);
-        if (result != SQLiteInterop.Result.OK) {
-            string errorMessage = SQLiteInterop.GetErrmsg(Handle!);
+        SQLiteRaw.Result result = SQLiteRaw.EnableLoadExtension(Handle, enabled ? 1 : 0);
+        if (result is not SQLiteRaw.Result.OK) {
+            string errorMessage = SQLiteRaw.GetErrorMessage(Handle);
             throw new SQLiteException(result, errorMessage);
         }
     }
@@ -189,51 +145,19 @@ public partial class SQLiteConnection : IDisposable {
         set {
             _busyTimeout = value;
             if (Handle is not null) {
-                SQLiteInterop.BusyTimeout(Handle, (int)_busyTimeout.TotalMilliseconds);
+                SQLiteRaw.BusyTimeout(Handle, (int)_busyTimeout.TotalMilliseconds);
             }
         }
     }
 
     /// <summary>
-    /// Returns the mappings from types to tables that the connection
-    /// currently understands.
+    /// Retrieves the table mapping for the given type, generating it if not found.
     /// </summary>
-    public IEnumerable<TableMapping> TableMappings {
-        get {
-            lock (_mappings) {
-                return new List<TableMapping>(_mappings.Values);
-            }
-        }
-    }
-
-    /// <summary>
-    /// Retrieves the mapping that is automatically generated for the given type.
-    /// </summary>
-    /// <param name="type">
-    /// The type whose mapping to the database is returned.
-    /// </param>
-    /// <param name="createFlags">
-    /// Optional flags allowing implicit primary key and indexes based on naming conventions
-    /// </param>
     /// <returns>
-    /// The mapping represents the schema of the columns of the database and contains
-    /// methods to set and get properties of objects.
+    /// A mapping containing the table column schema and methods to get/set properties of objects.
     /// </returns>
     public TableMapping GetMapping(Type type, CreateFlags createFlags = CreateFlags.None) {
-        string key = type.FullName ?? throw new ArgumentException("Type must have a fully qualified name");
-        lock (_mappings) {
-            if (_mappings.TryGetValue(key, out TableMapping? map)) {
-                if (createFlags != CreateFlags.None && createFlags != map.CreateFlags) {
-                    map = new TableMapping(type, createFlags);
-                    _mappings[key] = map;
-                }
-            }
-            else {
-                map = new TableMapping(type, createFlags);
-                _mappings.Add(key, map);
-            }
-            return map;
-        }
+        return Mappings.GetOrAdd(type, type => new TableMapping(type, createFlags));
     }
 
     /// <summary>
@@ -301,7 +225,7 @@ public partial class SQLiteConnection : IDisposable {
 
         // Create new table
         if (existingColumns.Count == 0) {
-            // Add virtual table declarations for full-text search
+            // Add virtual table modifiers for full-text search
             string virtualModifier = createFlags.HasFlag(CreateFlags.FullTextSearch3 | CreateFlags.FullTextSearch4 | CreateFlags.FullTextSearch5) ? "virtual" : "";
             string usingModifier = createFlags switch {
                 CreateFlags.FullTextSearch5 => "using fts5",
@@ -317,7 +241,7 @@ public partial class SQLiteConnection : IDisposable {
             string withoutRowIdModifier = map.WithoutRowId ? "without rowid" : "";
 
             // Build query
-            string query = $"create {virtualModifier} table if not exists \"{map.TableName}\" {usingModifier} ({columnDeclarations}) {withoutRowIdModifier}";
+            string query = $"create {virtualModifier} table if not exists {Quote(map.TableName)} {usingModifier} ({columnDeclarations}) {withoutRowIdModifier}";
             // Execute query
             Execute(query);
         }
@@ -337,7 +261,7 @@ public partial class SQLiteConnection : IDisposable {
                         IndexName = indexName,
                         TableName = map.TableName,
                         Unique = index.Unique,
-                        Columns = []
+                        Columns = [],
                     };
                     indexes.Add(indexName, indexInfo);
                 }
@@ -348,7 +272,7 @@ public partial class SQLiteConnection : IDisposable {
 
                 indexInfo.Columns.Add(new IndexedColumn() {
                     Order = index.Order,
-                    ColumnName = column.Name
+                    ColumnName = column.Name,
                 });
             }
         }
@@ -381,61 +305,24 @@ public partial class SQLiteConnection : IDisposable {
     }
 
     /// <summary>
-    /// Creates an index for the specified table and columns.
+    /// Creates an index for the specified table and columns, enabling constant lookup times for the columns.
     /// </summary>
-    /// <param name="indexName">Name of the index to create</param>
-    /// <param name="tableName">Name of the database table</param>
-    /// <param name="columnNames">An array of column names to index</param>
-    /// <param name="unique">Whether the index should be unique</param>
-    /// <returns>Zero on success.</returns>
-    public int CreateIndex(string indexName, string tableName, string[] columnNames, bool unique = false) {
-        string sql = $"create {(unique ? "unique" : "")} index if not exists \"{indexName}\" on \"{tableName}\"(\"{string.Join("\", \"", columnNames)}\")";
-        return Execute(sql);
+    public void CreateIndex(string indexName, string tableName, IEnumerable<string> columnNames, bool unique = false) {
+        string sql = $"create {(unique ? "unique" : "")} index if not exists {Quote(indexName)} on {Quote(tableName)}({string.Join(", ", columnNames.Select(Quote))})";
+        Execute(sql);
     }
-
-    /// <summary>
-    /// Creates an index for the specified table and column.
-    /// </summary>
-    /// <param name="indexName">Name of the index to create</param>
-    /// <param name="tableName">Name of the database table</param>
-    /// <param name="columnName">Name of the column to index</param>
-    /// <param name="unique">Whether the index should be unique</param>
-    /// <returns>Zero on success.</returns>
-    public int CreateIndex(string indexName, string tableName, string columnName, bool unique = false) {
-        return CreateIndex(indexName, tableName, [columnName], unique);
+    /// <inheritdoc cref="CreateIndex(string, string, IEnumerable{string}, bool)"/>
+    public void CreateIndex(string tableName, IEnumerable<string> columnNames, bool unique = false) {
+        CreateIndex($"{tableName}_{string.Join("_", columnNames)}", tableName, columnNames, unique);
     }
-
     /// <summary>
-    /// Creates an index for the specified table and column.
+    /// Creates an index for the specified table column.<br/>
+    /// For example:
+    /// <code>
+    /// CreateIndex&lt;Player&gt;(player => player.Name);
+    /// </code>
     /// </summary>
-    /// <param name="tableName">Name of the database table</param>
-    /// <param name="columnName">Name of the column to index</param>
-    /// <param name="unique">Whether the index should be unique</param>
-    /// <returns>Zero on success.</returns>
-    public int CreateIndex(string tableName, string columnName, bool unique = false) {
-        return CreateIndex(tableName + "_" + columnName, tableName, columnName, unique);
-    }
-
-    /// <summary>
-    /// Creates an index for the specified table and columns.
-    /// </summary>
-    /// <param name="tableName">Name of the database table</param>
-    /// <param name="columnNames">An array of column names to index</param>
-    /// <param name="unique">Whether the index should be unique</param>
-    /// <returns>Zero on success.</returns>
-    public int CreateIndex(string tableName, string[] columnNames, bool unique = false) {
-        return CreateIndex(tableName + "_" + string.Join("_", columnNames), tableName, columnNames, unique);
-    }
-
-    /// <summary>
-    /// Creates an index for the specified object property.
-    /// e.g. CreateIndex&lt;Client&gt;(c => c.Name);
-    /// </summary>
-    /// <typeparam name="T">Type to reflect to a database table.</typeparam>
-    /// <param name="property">Property to index</param>
-    /// <param name="unique">Whether the index should be unique</param>
-    /// <returns>Zero on success.</returns>
-    public int CreateIndex<T>(Expression<Func<T, object>> property, bool unique = false) {
+    public void CreateIndex<T>(Expression<Func<T, object>> property, bool unique = false) {
         MemberExpression? memberExpression;
         if (property.Body.NodeType is ExpressionType.Convert) {
             memberExpression = ((UnaryExpression)property.Body).Operand as MemberExpression;
@@ -443,14 +330,14 @@ public partial class SQLiteConnection : IDisposable {
         else {
             memberExpression = property.Body as MemberExpression;
         }
+
         PropertyInfo propertyInfo = memberExpression?.Member as PropertyInfo
             ?? throw new ArgumentException("The lambda expression 'property' should point to a valid Property");
-        string propName = propertyInfo.Name;
 
         TableMapping map = GetMapping<T>();
-        string columnName = map.FindColumnWithPropertyName(propName)!.Name;
+        string columnName = map.FindColumnByMemberName(propertyInfo.Name)!.Name;
 
-        return CreateIndex(map.TableName, columnName, unique);
+        CreateIndex(map.TableName, [columnName], unique);
     }
 
     public class ColumnInfo {
@@ -468,28 +355,21 @@ public partial class SQLiteConnection : IDisposable {
     /// <returns>The columns contains in the table.</returns>
     /// <param name="tableName">Table name.</param>
     public List<ColumnInfo> GetTableInfo(string tableName) {
-        string query = "pragma table_info(\"" + tableName + "\")";
+        string query = $"pragma table_info({Quote(tableName)})";
         return Query<ColumnInfo>(query).ToList();
     }
 
-    void MigrateTable(TableMapping map, List<ColumnInfo> existingColumns) {
+    private void MigrateTable(TableMapping map, List<ColumnInfo> existingColumns) {
         List<TableMapping.Column> columnsToAdd = [];
 
         foreach (TableMapping.Column column in map.Columns) {
-            bool found = false;
-            foreach (ColumnInfo existingColumn in existingColumns) {
-                found = string.Equals(column.Name, existingColumn.Name, StringComparison.OrdinalIgnoreCase);
-                if (found) {
-                    break;
-                }
-            }
-            if (!found) {
+            if (!existingColumns.Any(existingColumn => existingColumn.Name.Equals(column.Name, StringComparison.OrdinalIgnoreCase))) {
                 columnsToAdd.Add(column);
             }
         }
 
         foreach (TableMapping.Column columnToAdd in columnsToAdd) {
-            string sql = $"alter table \"{map.TableName}\" add column {Orm.GetSqlDeclaration(columnToAdd)}";
+            string sql = $"alter table {Quote(map.TableName)} add column {Orm.GetSqlDeclaration(columnToAdd)}";
             Execute(sql);
         }
     }
@@ -516,8 +396,8 @@ public partial class SQLiteConnection : IDisposable {
     /// A <see cref="SQLiteCommand"/>
     /// </returns>
     public SQLiteCommand CreateCommand(string commandText, params IEnumerable<object?> parameters) {
-        if (!_open) {
-            throw new SQLiteException(SQLiteInterop.Result.Error, "Cannot create commands from unopened database");
+        if (Handle.IsInvalid) {
+            throw new SQLiteException(SQLiteRaw.Result.Error, "Cannot create commands from unopened database");
         }
 
         SQLiteCommand command = NewCommand();
@@ -543,8 +423,8 @@ public partial class SQLiteConnection : IDisposable {
     /// A <see cref="SQLiteCommand" />
     /// </returns>
     public SQLiteCommand CreateCommand(string commandText, Dictionary<string, object> parameters) {
-        if (!_open) {
-            throw new SQLiteException(SQLiteInterop.Result.Error, "Cannot create commands from unopened database");
+        if (Handle.IsInvalid) {
+            throw new SQLiteException(SQLiteRaw.Result.Error, "Cannot create commands from unopened database");
         }
 
         SQLiteCommand command = NewCommand();
@@ -631,26 +511,6 @@ public partial class SQLiteConnection : IDisposable {
     /// <summary>
     /// Creates a SQLiteCommand given the command text (SQL) with arguments. Place a '?'
     /// in the command text for each of the arguments and then executes that command.
-    /// It returns each row of the result using the mapping automatically generated for
-    /// the given type.
-    /// </summary>
-    /// <param name="query">
-    /// The fully escaped SQL.
-    /// </param>
-    /// <param name="parameters">
-    /// Arguments to substitute for the occurences of '?' in the query.
-    /// </param>
-    /// <returns>
-    /// An enumerable with one result for each row returned by the query.
-    /// </returns>
-    public IEnumerable<T> Query<T>(string query, params IEnumerable<object?> parameters) where T : new() {
-        SQLiteCommand command = CreateCommand(query, parameters);
-        return command.ExecuteQuery<T>();
-    }
-
-    /// <summary>
-    /// Creates a SQLiteCommand given the command text (SQL) with arguments. Place a '?'
-    /// in the command text for each of the arguments and then executes that command.
     /// It returns the first column of each row of the result.
     /// </summary>
     /// <param name="query">
@@ -663,151 +523,66 @@ public partial class SQLiteConnection : IDisposable {
     /// An enumerable with one result for the first column of each row returned by the query.
     /// </returns>
     public List<T> QueryScalars<T>(string query, params IEnumerable<object?> parameters) {
-        SQLiteCommand command = CreateCommand(query, parameters);
-        return command.ExecuteQueryScalars<T>().ToList();
+        return CreateCommand(query, parameters).ExecuteQueryScalars<T>().ToList();
     }
 
     /// <summary>
-    /// Creates a SQLiteCommand given the command text (SQL) with arguments. Place a '?'
-    /// in the command text for each of the arguments and then executes that command.
-    /// It returns each row of the result using the mapping automatically generated for
-    /// the given type.
+    /// Executes the query on the database and returns each row of the result using the specified mapping.<br/>
+    /// Place a <c>?</c> in the query for each parameter.
     /// </summary>
-    /// <param name="query">
-    /// The fully escaped SQL.
-    /// </param>
-    /// <param name="parameters">
-    /// Arguments to substitute for the occurences of '?' in the query.
-    /// </param>
     /// <returns>
-    /// An enumerable with one result for each row returned by the query.
-    /// The enumerator (retrieved by calling GetEnumerator() on the result of this method)
-    /// will call sqlite3_step on each call to MoveNext, so the database
-    /// connection must remain open for the lifetime of the enumerator.
+    /// An enumerable for each row returned by the query.
     /// </returns>
-    public IEnumerable<T> DeferredQuery<T>(string query, params IEnumerable<object?> parameters) where T : new() {
-        SQLiteCommand command = CreateCommand(query, parameters);
-        return command.ExecuteQuery<T>();
-    }
-
-    /// <summary>
-    /// Creates a SQLiteCommand given the command text (SQL) with arguments. Place a '?'
-    /// in the command text for each of the arguments and then executes that command.
-    /// It returns each row of the result using the specified mapping. This function is
-    /// only used by libraries in order to query the database via introspection. It is
-    /// normally not used.
-    /// </summary>
-    /// <param name="map">
-    /// A <see cref="TableMapping"/> to use to convert the resulting rows
-    /// into objects.
-    /// </param>
-    /// <param name="query">
-    /// The fully escaped SQL.
-    /// </param>
-    /// <param name="parameters">
-    /// Arguments to substitute for the occurences of '?' in the query.
-    /// </param>
-    /// <returns>
-    /// An enumerable with one result for each row returned by the query.
-    /// </returns>
+    /// <remarks>
+    /// The enumerator calls <c>sqlite3_step</c> on each call to MoveNext, so the database connection must remain open for the lifetime of the enumerator.
+    /// </remarks>
     public IEnumerable<object> Query(TableMapping map, string query, params IEnumerable<object?> parameters) {
-        SQLiteCommand command = CreateCommand(query, parameters);
-        return command.ExecuteQuery<object>(map);
+        return CreateCommand(query, parameters).ExecuteQuery<object>(map);
     }
-
-    /// <summary>
-    /// Creates a SQLiteCommand given the command text (SQL) with arguments. Place a '?'
-    /// in the command text for each of the arguments and then executes that command.
-    /// It returns each row of the result using the specified mapping. This function is
-    /// only used by libraries in order to query the database via introspection. It is
-    /// normally not used.
-    /// </summary>
-    /// <param name="map">
-    /// A <see cref="TableMapping"/> to use to convert the resulting rows
-    /// into objects.
-    /// </param>
-    /// <param name="query">
-    /// The fully escaped SQL.
-    /// </param>
-    /// <param name="parameters">
-    /// Arguments to substitute for the occurences of '?' in the query.
-    /// </param>
-    /// <returns>
-    /// An enumerable with one result for each row returned by the query.
-    /// The enumerator (retrieved by calling GetEnumerator() on the result of this method)
-    /// will call sqlite3_step on each call to MoveNext, so the database
-    /// connection must remain open for the lifetime of the enumerator.
-    /// </returns>
-    public IEnumerable<object> DeferredQuery(TableMapping map, string query, params IEnumerable<object?> parameters) {
-        SQLiteCommand command = CreateCommand(query, parameters);
-        return command.ExecuteQuery<object>(map);
+    /// <inheritdoc cref="Query(TableMapping, string, IEnumerable{object?})"/>
+    public IEnumerable<T> Query<T>(string query, params IEnumerable<object?> parameters) where T : new() {
+        return CreateCommand(query, parameters).ExecuteQuery<T>();
     }
 
     /// <summary>
     /// Creates a queryable interface to the table associated with the given type.
     /// </summary>
     /// <returns>
-    /// A queryable object that can perform Where, OrderBy, Count, Take and Skip queries on the table.
+    /// A queryable object that can perform <c>Where</c>, <c>OrderBy</c>, <c>Count</c>, <c>Take</c> and <c>Skip</c> queries on the table.
     /// </returns>
     public TableQuery<T> Table<T>() where T : new() {
         return new TableQuery<T>(this);
     }
 
     /// <summary>
-    /// Attempts to retrieve an object with the given primary key from the table
-    /// associated with the specified type. Use of this method requires that
-    /// the given type have a designated PrimaryKey (using the PrimaryKeyAttribute).
+    /// Retrieves an object with the primary key from the associated table.<br/>
+    /// The object must have a designated primary key.
     /// </summary>
-    /// <param name="primaryKey">
-    /// The primary key.
-    /// </param>
     /// <returns>
-    /// The object with the given primary key. Throws a not found exception if the object is not found.
-    /// </returns>
-    public T Get<T>(object primaryKey) where T : new() {
-        TableMapping map = GetMapping<T>();
-        return Query<T>(map.GetByPrimaryKeySql, primaryKey).First();
-    }
-
-    /// <summary>
-    /// Attempts to retrieve an object with the given primary key from the table
-    /// associated with the specified type. Use of this method requires that
-    /// the given type have a designated PrimaryKey (using the PrimaryKeyAttribute).
-    /// </summary>
-    /// <param name="primaryKey">
-    /// The primary key.
-    /// </param>
-    /// <param name="map">
-    /// The TableMapping used to identify the table.
-    /// </param>
-    /// <returns>
-    /// The object with the given primary key. Throws a not found exception if the object is not found.
+    /// The object with the primary key. Throws an exception if the object is not found.
     /// </returns>
     public object Get(object primaryKey, TableMapping map) {
         return Query(map, map.GetByPrimaryKeySql, primaryKey).First();
     }
-
+    /// <inheritdoc cref="Get(object, TableMapping)"/>
+    public T Get<T>(object primaryKey) where T : new() {
+        return Query<T>(GetMapping<T>().GetByPrimaryKeySql, primaryKey).First();
+    }
     /// <summary>
-    /// Attempts to retrieve the first object that matches the predicate from the table
-    /// associated with the specified type.
+    /// Retrieves an object matching the predicate from the associated table.
     /// </summary>
-    /// <param name="predicate">
-    /// A predicate for which object to find.
-    /// </param>
     /// <returns>
-    /// The object that matches the given predicate. Throws a not found exception if the object is not found.
+    /// The first object matching the predicate. Throws an exception if the object is not found.
     /// </returns>
     public T Get<T>(Expression<Func<T, bool>> predicate) where T : new() {
         return Table<T>().Where(predicate).First();
     }
-
-
     /// <summary>
-    /// Retrieves an object with the given primary key from the associated table.<br/>
+    /// Retrieves an object with the primary key from the associated table.<br/>
     /// The table must have a designated primary key.
     /// </summary>
     /// <returns>
-    /// The object with the given primary key, or <see langword="null"/> if the object is not found.
+    /// The object with the primary key, or <see langword="null"/> if the object is not found.
     /// </returns>
     public object? Find(object primaryKey, TableMapping map) {
         return Query(map, map.GetByPrimaryKeySql, primaryKey).FirstOrDefault();
@@ -820,251 +595,105 @@ public partial class SQLiteConnection : IDisposable {
     /// Retrieves the first object matching the predicate from the associated table.
     /// </summary>
     /// <returns>
-    /// The first object matching the given predicate, or <see langword="null"/> if no objects match the predicate.
+    /// The first object matching the predicate, or <see langword="null"/> if no objects match the predicate.
     /// </returns>
     public T? Find<T>(Expression<Func<T, bool>> predicate) where T : new() {
         return Table<T>().Where(predicate).FirstOrDefault();
     }
-
     /// <summary>
-    /// Attempts to retrieve the first object that matches the query from the table
-    /// associated with the specified type.
+    /// Retrieves the first object matching the SQL query from the associated table.
     /// </summary>
-    /// <param name="query">
-    /// The fully escaped SQL.
-    /// </param>
-    /// <param name="parameters">
-    /// Arguments to substitute for the occurences of '?' in the query.
-    /// </param>
     /// <returns>
-    /// The object that matches the given predicate or null if the object is not found.
+    /// The first object matching the query, or <see langword="null"/> if no objects match the predicate.
     /// </returns>
+    public object? FindWithQuery(TableMapping map, string query, params IEnumerable<object?> parameters) {
+        return Query(map, query, parameters).FirstOrDefault();
+    }
+    /// <inheritdoc cref="FindWithQuery(TableMapping, string, IEnumerable{object?})"/>
     public T? FindWithQuery<T>(string query, params IEnumerable<object?> parameters) where T : new() {
         return Query<T>(query, parameters).FirstOrDefault();
     }
 
     /// <summary>
-    /// Attempts to retrieve the first object that matches the query from the table
-    /// associated with the specified type.
+    /// Creates a transaction or savepoint for commands to be rolled back or committed.<br/>
+    /// Call <see cref="Rollback(string?)"/> to cancel the transaction or <see cref="Commit(string?)"/> to perform the transaction.
     /// </summary>
-    /// <param name="map">
-    /// The TableMapping used to identify the table.
-    /// </param>
-    /// <param name="query">
-    /// The fully escaped SQL.
-    /// </param>
-    /// <param name="parameters">
-    /// Arguments to substitute for the occurences of '?' in the query.
-    /// </param>
-    /// <returns>
-    /// The object that matches the given predicate or null if the object is not found.
-    /// </returns>
-    public object? FindWithQuery(TableMapping map, string query, params IEnumerable<object?> parameters) {
-        return Query(map, query, parameters).FirstOrDefault();
-    }
-
-    /// <summary>
-    /// Whether <see cref="BeginTransaction"/> has been called and the database is waiting for a <see cref="Commit"/>.
-    /// </summary>
-    public bool IsInTransaction {
-        get => _transactionDepth > 0;
-    }
-
-    /// <summary>
-    /// Begins a new transaction. Call <see cref="Commit"/> to end the transaction.
-    /// </summary>
-    /// <example cref="InvalidOperationException">Throws if a transaction has already begun.</example>
-    public void BeginTransaction() {
-        // The BEGIN command only works if the transaction stack is empty,
-        //    or in other words if there are no pending transactions.
-        // If the transaction stack is not empty when the BEGIN command is invoked,
-        //    then the command fails with an error.
-        // Rather than crash with an error, we will just ignore calls to BeginTransaction
-        //    that would result in an error.
-        if (Interlocked.CompareExchange(ref _transactionDepth, 1, 0) == 0) {
-            try {
+    public void SavePoint(string? savePointName = null) {
+        try {
+            // Create savepoint
+            if (savePointName is not null) {
+                Execute($"savepoint {Quote(savePointName)}");
+            }
+            // Create transaction
+            else {
                 Execute("begin transaction");
             }
-            catch (SQLiteException ex) {
-                // It is recommended that applications respond to the errors listed below
-                //    by explicitly issuing a ROLLBACK command.
-                // TODO: This rollback failsafe should be localized to all throw sites.
-
-                if (ex.Result is SQLiteInterop.Result.IOError or SQLiteInterop.Result.Full or SQLiteInterop.Result.Busy or SQLiteInterop.Result.NoMem or SQLiteInterop.Result.Interrupt) {
-                    RollbackTo(null, true);
-                }
-                throw;
-            }
-            catch (Exception) {
-                Interlocked.Decrement(ref _transactionDepth);
-                throw;
-            }
         }
-        else {
-            // Calling BeginTransaction on an already open transaction is invalid
-            throw new InvalidOperationException("Cannot begin a transaction while already in a transaction.");
-        }
-    }
-
-    /// <summary>
-    /// Creates a savepoint in the database at the current point in the transaction timeline.
-    /// Begins a new transaction if one is not in progress.
-    /// <br/>
-    /// Call <see cref="RollbackTo(string)"/> to undo transactions since the returned savepoint.<br/>
-    /// Call <see cref="Release"/> to commit transactions after the savepoint returned here.<br/>
-    /// Call <see cref="Commit"/> to end the transaction, committing all changes.<br/>
-    /// </summary>
-    /// <returns>A string naming the savepoint.</returns>
-    public string SaveTransactionPoint() {
-        int depth = Interlocked.Increment(ref _transactionDepth) - 1;
-        string retVal = "S" + _rand.Next(short.MaxValue) + "D" + depth;
-
-        try {
-            Execute("savepoint " + retVal);
-        }
-        catch (SQLiteException ex) {
-            // It is recommended that applications respond to the errors listed below
-            //    by explicitly issuing a ROLLBACK command.
-            // TODO: This rollback failsafe should be localized to all throw sites.
-
-            if (ex.Result is SQLiteInterop.Result.IOError or SQLiteInterop.Result.Full or SQLiteInterop.Result.Busy or SQLiteInterop.Result.NoMem or SQLiteInterop.Result.Interrupt) {
-                RollbackTo(null, true);
-            }
-            throw;
-        }
+        // Failed to create transaction/savepoint
         catch (Exception) {
-            Interlocked.Decrement(ref _transactionDepth);
+            Rollback();
             throw;
         }
-
-        return retVal;
-    }
-
-    /// <summary>
-    /// Rolls back the transaction that was begun by <see cref="BeginTransaction"/> or <see cref="SaveTransactionPoint"/>.
-    /// </summary>
-    public void Rollback() {
-        RollbackTo(null);
     }
     /// <summary>
-    /// Rolls back the savepoint created by <see cref="BeginTransaction"/> or SaveTransactionPoint.
+    /// Rolls back the transaction to a point begun by <see cref="BeginTransaction()"/> or <see cref="SavePoint(string)"/>.
     /// </summary>
-    /// <param name="savepoint">The name of the savepoint to roll back to, as returned by <see cref="SaveTransactionPoint"/>.  If savepoint is null or empty, this method is equivalent to a call to <see cref="Rollback"/>.</param>
-    public void RollbackTo(string? savepoint) {
-        RollbackTo(savepoint, false);
-    }
-    /// <summary>
-    /// Rolls back the transaction that was begun by <see cref="BeginTransaction"/>.
-    /// </summary>
-    /// <param name="savePoint">The name of the savepoint to roll back to, as returned by <see cref="SaveTransactionPoint"/>.  If savepoint is null or empty, this method is equivalent to a call to <see cref="Rollback"/>.</param>
-    /// <param name="noThrow">true to avoid throwing exceptions, false otherwise.</param>
-    void RollbackTo(string? savePoint, bool noThrow) {
-        // Rolling back without a TO clause rolls backs all transactions
-        //    and leaves the transaction stack empty.
+    public void Rollback(string? savePointName = null) {
         try {
-            if (string.IsNullOrEmpty(savePoint)) {
-                if (Interlocked.Exchange(ref _transactionDepth, 0) > 0) {
-                    Execute("rollback");
-                }
+            // Rollback to savepoint
+            if (savePointName is not null) {
+                Execute($"rollback to {Quote(savePointName)}");
             }
+            // Rollback to beginning of transaction
             else {
-                DoSavePointExecute(savePoint!, "rollback to ");
+                Execute("rollback");
             }
         }
-        catch (SQLiteException) {
-            if (!noThrow) {
-                throw;
-            }
-        }
-        // No need to rollback if there are no transactions open.
-    }
-    /// <summary>
-    /// Releases a savepoint returned from <see cref="SaveTransactionPoint"/>. Releasing a savepoint
-    ///    makes changes since that savepoint permanent if the savepoint began the transaction,
-    ///    or otherwise the changes are permanent pending a call to <see cref="Commit"/>.
-    ///
-    /// The RELEASE command is like a COMMIT for a SAVEPOINT.
-    /// </summary>
-    /// <param name="savePoint">The name of the savepoint to release.  The string should be the result of a call to <see cref="SaveTransactionPoint"/></param>
-    public void Release(string savePoint) {
-        try {
-            DoSavePointExecute(savePoint, "release ");
-        }
-        catch (SQLiteException ex) {
-            if (ex.Result is SQLiteInterop.Result.Busy) {
-                // Force a rollback since most people don't know this function can fail
-                // Don't call Rollback() since the _transactionDepth is 0 and it won't try
-                // Calling rollback makes our _transactionDepth variable correct.
-                // Writes to the database only happen at depth=0, so this failure will only happen then.
-                try {
-                    Execute("rollback");
-                }
-                catch {
-                    // rollback can fail in all sorts of wonderful version-dependent ways. Let's just hope for the best
-                }
-            }
+        // Failed to rollback transaction/savepoint
+        catch (Exception) {
+            Rollback();
             throw;
         }
     }
-    private void DoSavePointExecute(string savePoint, string command) {
-        // Validate the savepoint
-        int firstLen = savePoint.IndexOf('D');
-        if (firstLen >= 2 && savePoint.Length > firstLen + 1) {
-            if (int.TryParse(savePoint.Substring(firstLen + 1), out int depth)) {
-                // TODO: Mild race here, but inescapable without locking almost everywhere.
-                if (0 <= depth && depth < _transactionDepth) {
-                    Volatile.Write(ref _transactionDepth, depth);
-                    Execute(command + savePoint);
-                    return;
-                }
-            }
-        }
-
-        throw new ArgumentException("savePoint is not valid, and should be the result of a call to SaveTransactionPoint.", nameof(savePoint));
-    }
     /// <summary>
-    /// Commits the transaction that was begun by <see cref="BeginTransaction"/>.
+    /// Commits the transaction that was begun by <see cref="BeginTransaction()"/> or <see cref="SavePoint(string)"/>.
     /// </summary>
-    public void Commit() {
-        if (Interlocked.Exchange(ref _transactionDepth, 0) != 0) {
-            try {
+    public void Commit(string? savePointName = null) {
+        try {
+            // Commit savepoint
+            if (savePointName is not null) {
+                Execute($"release {Quote(savePointName)}");
+            }
+            // Commit transaction
+            else {
                 Execute("commit");
             }
-            catch {
-                // Force a rollback since most people don't know this function can fail
-                // Don't call Rollback() since the _transactionDepth is 0 and it won't try
-                // Calling rollback makes our _transactionDepth variable correct.
-                try {
-                    Execute("rollback");
-                }
-                catch {
-                    // rollback can fail in all sorts of wonderful version-dependent ways. Let's just hope for the best
-                }
-                throw;
-            }
         }
-        // Do nothing on a commit with no open transaction
+        // Failed to commit transaction/savepoint
+        catch (Exception) {
+            Rollback();
+            throw;
+        }
     }
     /// <summary>
-    /// Executes <paramref name="action"/> within a (possibly nested) transaction by wrapping it in a SAVEPOINT. If an
-    /// exception occurs the whole transaction is rolled back, not just the current savepoint. The exception
-    /// is rethrown.
+    /// Creates a savepoint with a random name, executes the action and commits the transaction.<br/>
+    /// The action is rolled back on failure.
     /// </summary>
-    /// <param name="action">
-    /// The <see cref="Action"/> to perform within a transaction. <paramref name="action"/> can contain any number
-    /// of operations on the connection but should never call <see cref="BeginTransaction"/> or
-    /// <see cref="Commit"/>.
-    /// </param>
-    public void RunInTransaction(Action action) {
+    /// <returns>Whether the transaction was committed successfully.</returns>
+    public bool RunInTransaction(Action action) {
+        string savePointName = Guid.NewGuid().ToString();
         try {
-            string savePoint = SaveTransactionPoint();
+            SavePoint(savePointName);
             action();
-            Release(savePoint);
+            Commit(savePointName);
+            return true;
         }
-        finally {
-            Rollback();
+        catch (Exception) {
+            Rollback(savePointName);
+            return false;
         }
     }
+
     /// <summary>
     /// Inserts the given object into the table, updating any auto-incremented primary keys.<br/>
     /// The <paramref name="modifier"/> is literal SQL added after <c>INSERT</c> (e.g. <c>OR REPLACE</c>).
@@ -1110,14 +739,14 @@ public partial class SQLiteConnection : IDisposable {
             rowCount = Execute(query, values);
         }
         catch (SQLiteException ex) {
-            if (ex.Result is SQLiteInterop.Result.Constraint && SQLiteInterop.ExtendedErrCode(Handle!) is SQLiteInterop.ExtendedResult.ConstraintNotNull) {
+            if (ex.Result is SQLiteRaw.Result.Constraint && SQLiteRaw.GetExtendedErrorCode(Handle) is SQLiteRaw.ExtendedResult.ConstraintNotNull) {
                 throw new NotNullConstraintViolationException(ex, map, obj);
             }
             throw;
         }
 
         if (map.HasAutoIncrementedPrimaryKey) {
-            long id = SQLiteInterop.LastInsertRowid(Handle!);
+            long id = SQLiteRaw.GetLastInsertRowid(Handle);
             map.SetAutoIncrementedPrimaryKey(obj, id);
         }
 
@@ -1216,23 +845,6 @@ public partial class SQLiteConnection : IDisposable {
         }
         return counter;
     }
-    /// <summary>
-    /// Updates all of the columns of a table using the specified object
-    /// except for its primary key.
-    /// The object is required to have a primary key.
-    /// </summary>
-    /// <param name="obj">
-    /// The object to update. It must have a primary key designated using the PrimaryKeyAttribute.
-    /// </param>
-    /// <returns>
-    /// The number of rows updated.
-    /// </returns>
-    public int Update(object obj) {
-        if (obj is null) {
-            return 0;
-        }
-        return Update(obj, obj.GetType());
-    }
 
     /// <summary>
     /// Updates all of the columns of a table using the specified object
@@ -1248,12 +860,12 @@ public partial class SQLiteConnection : IDisposable {
     /// <returns>
     /// The number of rows updated.
     /// </returns>
-    public int Update(object obj, Type objType) {
-        if (obj is null || objType is null) {
+    public int Update(object obj) {
+        if (obj is null) {
             return 0;
         }
 
-        TableMapping map = GetMapping(objType);
+        TableMapping map = GetMapping(obj.GetType());
 
         TableMapping.Column primaryKey = map.PrimaryKey
             ?? throw new NotSupportedException($"Can't update in table '{map.TableName}' since it has no primary key");
@@ -1276,7 +888,7 @@ public partial class SQLiteConnection : IDisposable {
             rowCount = Execute(query, parameters);
         }
         catch (SQLiteException ex) {
-            if (ex.Result is SQLiteInterop.Result.Constraint && SQLiteInterop.ExtendedErrCode(Handle!) is SQLiteInterop.ExtendedResult.ConstraintNotNull) {
+            if (ex.Result is SQLiteRaw.Result.Constraint && SQLiteRaw.GetExtendedErrorCode(Handle) is SQLiteRaw.ExtendedResult.ConstraintNotNull) {
                 throw new NotNullConstraintViolationException(ex, map, obj);
             }
             throw;
@@ -1319,27 +931,6 @@ public partial class SQLiteConnection : IDisposable {
     }
 
     /// <summary>
-    /// Deletes the given object from the database using its primary key.
-    /// </summary>
-    /// <param name="objectToDelete">
-    /// The object to delete. It must have a primary key designated with <see cref="PrimaryKeyAttribute"/>.
-    /// </param>
-    /// <returns>
-    /// The number of rows deleted.
-    /// </returns>
-    public int Delete(object objectToDelete) {
-        TableMapping map = GetMapping(objectToDelete.GetType());
-        TableMapping.Column primaryKey = map.PrimaryKey
-            ?? throw new NotSupportedException($"Can't delete in table '{map.TableName}' since it has no primary key");
-        string query = $"delete from \"{map.TableName}\" where \"{primaryKey.Name}\" = ?";
-        int count = Execute(query, primaryKey.GetValue(objectToDelete));
-        if (count > 0) {
-            InvokeTableChanged(map, NotifyTableChangedAction.Delete);
-        }
-        return count;
-    }
-
-    /// <summary>
     /// Deletes the object with the specified primary key.
     /// </summary>
     /// <returns>
@@ -1358,9 +949,22 @@ public partial class SQLiteConnection : IDisposable {
     public int Delete<T>(object primaryKey) {
         return Delete(primaryKey, GetMapping<T>());
     }
+    /// <summary>
+    /// Deletes the given object from the database using its primary key.
+    /// </summary>
+    /// <param name="objectToDelete">
+    /// The object to delete. It must have a primary key designated with <see cref="PrimaryKeyAttribute"/>.
+    /// </param>
+    /// <returns>
+    /// The number of rows deleted.
+    /// </returns>
+    public int Delete(object objectToDelete) {
+        TableMapping map = GetMapping(objectToDelete.GetType());
+        return Delete(map.PrimaryKey?.GetValue(objectToDelete)!, map);
+    }
 
     /// <summary>
-    /// Deletes all the objects from the specified table.<br/>
+    /// Deletes every object from the specified table.<br/>
     /// Be careful using this.
     /// </summary>
     /// <returns>
@@ -1380,56 +984,58 @@ public partial class SQLiteConnection : IDisposable {
     }
 
     /// <summary>
-    /// Backup the entire database to the specified path.
+    /// Saves a backup of the entire database to the specified path.
     /// </summary>
     /// <param name="destinationDatabasePath">Path to backup file.</param>
     /// <param name="databaseName">The name of the database to backup (usually "main").</param>
     public void Backup(string destinationDatabasePath, string databaseName = "main") {
         // Open the destination
-        SQLiteInterop.Result result = SQLiteInterop.Open(destinationDatabasePath, out Sqlite3DatabaseHandle destHandle, OpenFlags.ReadOnly, null);
-        if (result is not SQLiteInterop.Result.OK) {
+        SQLiteRaw.Result result = SQLiteRaw.Open(destinationDatabasePath, out Sqlite3DatabaseHandle destHandle, OpenFlags.ReadOnly, null);
+        if (result is not SQLiteRaw.Result.OK) {
             throw new SQLiteException(result, "Failed to open destination database");
         }
 
         // Init the backup
-        Sqlite3BackupHandle backupHandle = SQLiteInterop.BackupInit(destHandle, databaseName, Handle!, databaseName);
+        Sqlite3BackupHandle backupHandle = SQLiteRaw.BackupInit(destHandle, databaseName, Handle, databaseName);
         if (backupHandle is null) {
-            SQLiteInterop.Close(destHandle);
+            SQLiteRaw.Close(destHandle);
             throw new Exception("Failed to create backup");
         }
 
         // Perform it
-        SQLiteInterop.BackupStep(backupHandle, -1);
-        SQLiteInterop.BackupFinish(backupHandle);
+        SQLiteRaw.BackupStep(backupHandle, -1);
+        SQLiteRaw.BackupFinish(backupHandle);
 
         // Check for errors
-        result = SQLiteInterop.GetResult(destHandle);
-        string msg = "";
-        if (result != SQLiteInterop.Result.OK) {
-            msg = SQLiteInterop.GetErrmsg(destHandle);
+        result = SQLiteRaw.GetResult(destHandle);
+        string errorMessage = "";
+        if (result is not SQLiteRaw.Result.OK) {
+            errorMessage = SQLiteRaw.GetErrorMessage(destHandle);
         }
 
         // Close everything and report errors
-        SQLiteInterop.Close(destHandle);
-        if (result != SQLiteInterop.Result.OK) {
-            throw new SQLiteException(result, msg);
+        SQLiteRaw.Close(destHandle);
+        if (result is not SQLiteRaw.Result.OK) {
+            throw new SQLiteException(result, errorMessage);
         }
     }
 
     public void Dispose() {
         GC.SuppressFinalize(this);
-        if (_open && Handle is not null) {
-            try {
-                SQLiteInterop.Result result = SQLiteInterop.Close(Handle);
-                if (result is not SQLiteInterop.Result.OK) {
-                    string msg = SQLiteInterop.GetErrmsg(Handle);
-                    throw new SQLiteException(result, msg);
-                }
+
+        if (Handle.IsInvalid) {
+            return;
+        }
+
+        try {
+            SQLiteRaw.Result result = SQLiteRaw.Close(Handle);
+            if (result is not SQLiteRaw.Result.OK) {
+                string msg = SQLiteRaw.GetErrorMessage(Handle);
+                throw new SQLiteException(result, msg);
             }
-            finally {
-                Handle = null;
-                _open = false;
-            }
+        }
+        finally {
+            Handle.Dispose();
         }
     }
 

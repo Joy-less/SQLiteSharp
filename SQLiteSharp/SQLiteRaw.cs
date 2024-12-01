@@ -1,6 +1,8 @@
-﻿namespace SQLiteSharp;
+﻿using SQLitePCL;
 
-public static class SQLiteInterop {
+namespace SQLiteSharp;
+
+public static class SQLiteRaw {
     public enum Result : int {
         OK = 0,
         Error = 1,
@@ -34,7 +36,6 @@ public static class SQLiteInterop {
         Row = 100,
         Done = 101
     }
-
     public enum ExtendedResult : int {
         IOErrorRead = Result.IOError | (1 << 8),
         IOErrorShortRead = Result.IOError | (2 << 8),
@@ -83,12 +84,6 @@ public static class SQLiteInterop {
         NoticeRecoverRollback = Result.Notice | (2 << 8),
     }
 
-    public enum ConfigOption : int {
-        SingleThread = 1,
-        MultiThread = 2,
-        Serialized = 3,
-    }
-
     public static Result Open(string filename, out Sqlite3DatabaseHandle db, OpenFlags flags, string? vfsName) {
         return (Result)Sqlite3.sqlite3_open_v2(filename, out db, (int)flags, vfsName);
     }
@@ -104,7 +99,7 @@ public static class SQLiteInterop {
     public static Sqlite3Statement Prepare2(Sqlite3DatabaseHandle db, string query) {
         int result = Sqlite3.sqlite3_prepare_v2(db, query, out Sqlite3Statement? stmt);
         if (result != 0) {
-            throw new SQLiteException((Result)result, GetErrmsg(db));
+            throw new SQLiteException((Result)result, GetErrorMessage(db));
         }
         return stmt;
     }
@@ -117,11 +112,8 @@ public static class SQLiteInterop {
     public static Result Finalize(Sqlite3Statement stmt) {
         return (Result)Sqlite3.sqlite3_finalize(stmt);
     }
-    public static long LastInsertRowid(Sqlite3DatabaseHandle db) {
+    public static long GetLastInsertRowid(Sqlite3DatabaseHandle db) {
         return Sqlite3.sqlite3_last_insert_rowid(db);
-    }
-    public static string GetErrmsg(Sqlite3DatabaseHandle db) {
-        return Sqlite3.sqlite3_errmsg(db).utf8_to_string();
     }
     public static int BindParameterIndex(Sqlite3Statement stmt, string name) {
         return Sqlite3.sqlite3_bind_parameter_index(stmt, name);
@@ -144,41 +136,32 @@ public static class SQLiteInterop {
     public static int BindBlob(Sqlite3Statement stmt, int index, byte[] val) {
         return Sqlite3.sqlite3_bind_blob(stmt, index, val);
     }
-    public static int ColumnCount(Sqlite3Statement stmt) {
+    public static int GetColumnCount(Sqlite3Statement stmt) {
         return Sqlite3.sqlite3_column_count(stmt);
     }
-    public static string ColumnName(Sqlite3Statement stmt, int index) {
+    public static string GetColumnName(Sqlite3Statement stmt, int index) {
         return Sqlite3.sqlite3_column_name(stmt, index).utf8_to_string();
     }
-    public static string ColumnName16(Sqlite3Statement stmt, int index) {
-        return Sqlite3.sqlite3_column_name(stmt, index).utf8_to_string();
+    public static ColumnType GetColumnType(Sqlite3Statement stmt, int index) {
+        return (ColumnType)Sqlite3.sqlite3_column_type(stmt, index);
     }
-    public static ColType ColumnType(Sqlite3Statement stmt, int index) {
-        return (ColType)Sqlite3.sqlite3_column_type(stmt, index);
-    }
-    public static int ColumnInt(Sqlite3Statement stmt, int index) {
+    public static int GetColumnInt(Sqlite3Statement stmt, int index) {
         return Sqlite3.sqlite3_column_int(stmt, index);
     }
-    public static long ColumnInt64(Sqlite3Statement stmt, int index) {
+    public static long GetColumnInt64(Sqlite3Statement stmt, int index) {
         return Sqlite3.sqlite3_column_int64(stmt, index);
     }
-    public static double ColumnDouble(Sqlite3Statement stmt, int index) {
+    public static double GetColumnDouble(Sqlite3Statement stmt, int index) {
         return Sqlite3.sqlite3_column_double(stmt, index);
     }
-    public static string ColumnText(Sqlite3Statement stmt, int index) {
+    public static string GetColumnText(Sqlite3Statement stmt, int index) {
         return Sqlite3.sqlite3_column_text(stmt, index).utf8_to_string();
     }
-    public static string ColumnText16(Sqlite3Statement stmt, int index) {
-        return Sqlite3.sqlite3_column_text(stmt, index).utf8_to_string();
-    }
-    public static byte[] ColumnBlob(Sqlite3Statement stmt, int index) {
+    public static byte[] GetColumnBlob(Sqlite3Statement stmt, int index) {
         return Sqlite3.sqlite3_column_blob(stmt, index).ToArray();
     }
-    public static int ColumnBytes(Sqlite3Statement stmt, int index) {
+    public static int GetColumnByteCount(Sqlite3Statement stmt, int index) {
         return Sqlite3.sqlite3_column_bytes(stmt, index);
-    }
-    public static string ColumnString(Sqlite3Statement stmt, int index) {
-        return Sqlite3.sqlite3_column_text(stmt, index).utf8_to_string();
     }
     public static Result EnableLoadExtension(Sqlite3DatabaseHandle db, int onoff) {
         return (Result)Sqlite3.sqlite3_enable_load_extension(db, onoff);
@@ -189,8 +172,11 @@ public static class SQLiteInterop {
     public static Result GetResult(Sqlite3DatabaseHandle db) {
         return (Result)Sqlite3.sqlite3_errcode(db);
     }
-    public static ExtendedResult ExtendedErrCode(Sqlite3DatabaseHandle db) {
+    public static ExtendedResult GetExtendedErrorCode(Sqlite3DatabaseHandle db) {
         return (ExtendedResult)Sqlite3.sqlite3_extended_errcode(db);
+    }
+    public static string GetErrorMessage(Sqlite3DatabaseHandle db) {
+        return Sqlite3.sqlite3_errmsg(db).utf8_to_string();
     }
     public static Sqlite3BackupHandle BackupInit(Sqlite3DatabaseHandle destDb, string destName, Sqlite3DatabaseHandle sourceDb, string sourceName) {
         return Sqlite3.sqlite3_backup_init(destDb, destName, sourceDb, sourceName);
@@ -201,8 +187,14 @@ public static class SQLiteInterop {
     public static Result BackupFinish(Sqlite3BackupHandle backup) {
         return (Result)Sqlite3.sqlite3_backup_finish(backup);
     }
+    public static Result SetKey(Sqlite3DatabaseHandle handle, ReadOnlySpan<byte> key, string name = "main") {
+        return (Result)Sqlite3.sqlite3_key_v2(handle, utf8z.FromString(name), key);
+    }
+    public static Result ChangeKey(Sqlite3DatabaseHandle handle, ReadOnlySpan<byte> key, string name = "main") {
+        return (Result)Sqlite3.sqlite3_rekey_v2(handle, utf8z.FromString(name), key);
+    }
 
-    public enum ColType : int {
+    public enum ColumnType : int {
         Integer = 1,
         Float = 2,
         Text = 3,

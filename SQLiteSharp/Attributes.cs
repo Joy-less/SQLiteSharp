@@ -56,9 +56,7 @@ public class MaxLengthAttribute(int length) : Attribute {
 }
 
 /// <summary>
-/// Select the collating sequence to use on a column.<br/>
-/// <c>BINARY</c>, <c>NOCASE</c>, and <c>RTRIM</c> are supported.<br/>
-/// <c>BINARY</c> is the default.
+/// The string comparison type to use (see <see cref="CollationType"/>).
 /// </summary>
 [AttributeUsage(AttributeTargets.Property | AttributeTargets.Field)]
 public class CollationAttribute(string collation) : Attribute {
