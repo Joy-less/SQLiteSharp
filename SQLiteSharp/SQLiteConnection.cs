@@ -326,60 +326,26 @@ public partial class SQLiteConnection : IDisposable {
     }
 
     /// <summary>
-    /// Creates a new SQLiteCommand. Can be overridden to provide a sub-class.
+    /// Creates a new SQLiteCommand given the command text with parameters.<br/>
+    /// Place <c>?</c> in the command text for each argument.
     /// </summary>
-    /// <seealso cref="SQLiteCommand.OnInstanceCreated"/>
-    protected virtual SQLiteCommand NewCommand() {
-        return new SQLiteCommand(this);
-    }
-
-    /// <summary>
-    /// Creates a new SQLiteCommand given the command text with arguments. Place a '?'
-    /// in the command text for each of the arguments.
-    /// </summary>
-    /// <param name="commandText">
-    /// The fully escaped SQL.
-    /// </param>
-    /// <param name="parameters">
-    /// Arguments to substitute for the occurences of '?' in the command text.
-    /// </param>
-    /// <returns>
-    /// A <see cref="SQLiteCommand"/>
-    /// </returns>
     public SQLiteCommand CreateCommand(string commandText, params IEnumerable<object?> parameters) {
-        if (Handle.IsInvalid) {
-            throw new SQLiteException(SQLiteRaw.Result.Error, "Cannot create commands from unopened database");
-        }
-
-        SQLiteCommand command = NewCommand();
-        command.CommandText = commandText;
+        SQLiteCommand command = new(this) {
+            CommandText = commandText,
+        };
         foreach (object? parameter in parameters) {
             command.Bind(parameter);
         }
         return command;
     }
-
     /// <summary>
-    /// Creates a new SQLiteCommand given the command text with named arguments. Place a "[@:$]VVV"
-    /// in the command text for each of the arguments. VVV represents an alphanumeric identifier.
-    /// For example, @name :name and $name can all be used in the query.
+    /// Creates a new SQLiteCommand given the command text with named parameters. Place <c>@</c> or <c>:</c> or <c>$</c> followed by an alphanumeric identifier for each argument.<br/>
+    /// For example, <c>@name</c>, <c>:name</c> and <c>$name</c> can all be used.
     /// </summary>
-    /// <param name="commandText">
-    /// The fully escaped SQL.
-    /// </param>
-    /// <param name="parameters">
-    /// Arguments to substitute for the occurences of "[@:$]VVV" in the command text.
-    /// </param>
-    /// <returns>
-    /// A <see cref="SQLiteCommand" />
-    /// </returns>
     public SQLiteCommand CreateCommand(string commandText, Dictionary<string, object> parameters) {
-        if (Handle.IsInvalid) {
-            throw new SQLiteException(SQLiteRaw.Result.Error, "Cannot create commands from unopened database");
-        }
-
-        SQLiteCommand command = NewCommand();
-        command.CommandText = commandText;
+        SQLiteCommand command = new(this) {
+            CommandText = commandText,
+        };
         foreach (KeyValuePair<string, object> parameter in parameters) {
             command.Bind(parameter.Key, parameter.Value);
         }
