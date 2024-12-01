@@ -89,10 +89,6 @@ public partial class SQLiteCommand(SQLiteConnection conn) {
     public string CommandText { get; set; } = "";
 
     public int ExecuteNonQuery() {
-        if (_conn.Trace) {
-            _conn.Tracer?.Invoke("Executing: " + this);
-        }
-
         Sqlite3Statement statement = Prepare();
         SQLiteRaw.Result result = SQLiteRaw.Step(statement);
         SQLiteRaw.Finalize(statement);
@@ -123,10 +119,6 @@ public partial class SQLiteCommand(SQLiteConnection conn) {
     protected virtual void OnInstanceCreated(object obj) { }
 
     public IEnumerable<T> ExecuteQuery<T>(TableMapping map) {
-        if (_conn.Trace) {
-            _conn.Tracer?.Invoke("Executing Query: " + this);
-        }
-
         Sqlite3Statement statement = Prepare();
         try {
             while (SQLiteRaw.Step(statement) is SQLiteRaw.Result.Row) {
@@ -159,10 +151,6 @@ public partial class SQLiteCommand(SQLiteConnection conn) {
     }
 
     public T ExecuteScalar<T>() {
-        if (_conn.Trace) {
-            _conn.Tracer?.Invoke("Executing Query: " + this);
-        }
-
         T Value = default!;
 
         Sqlite3Statement stmt = Prepare();
@@ -190,9 +178,6 @@ public partial class SQLiteCommand(SQLiteConnection conn) {
     }
 
     public IEnumerable<T> ExecuteQueryScalars<T>() {
-        if (_conn.Trace) {
-            _conn.Tracer?.Invoke("Executing Query: " + this);
-        }
         Sqlite3Statement statement = Prepare();
         try {
             if (SQLiteRaw.GetColumnCount(statement) < 1) {

@@ -14,27 +14,11 @@ public partial class SQLiteConnection : IDisposable {
 
     public Sqlite3DatabaseHandle Handle { get; }
 
-    private TimeSpan _busyTimeout;
-    private Stopwatch? _stopwatch;
-    private long _elapsedMilliseconds = 0;
 
     /// <summary>
     /// The database path used by this connection.
     /// </summary>
     public string DatabasePath { get; }
-    /// <summary>
-    /// Whether Trace lines should be written that show the execution time of queries.
-    /// </summary>
-    public bool TimeExecution { get; set; }
-    /// <summary>
-    /// Whether to write queries to <see cref="Tracer"/> during execution.
-    /// </summary>
-    public bool Trace { get; set; }
-    /// <summary>
-    /// The delegate responsible for writing trace lines.
-    /// </summary>
-    /// <value>The tracer.</value>
-    public Action<string> Tracer { get; set; }
 
     /// <summary>
     /// Setup the SQLite Portable Class Library.
@@ -61,7 +45,6 @@ public partial class SQLiteConnection : IDisposable {
         }
 
         BusyTimeout = TimeSpan.FromSeconds(1.0);
-        Tracer = line => Debug.WriteLine(line);
 
         if (connectionString.Key is not null) {
             SQLiteRaw.SetKey(Handle, connectionString.Key);
@@ -125,16 +108,13 @@ public partial class SQLiteConnection : IDisposable {
     }
 
     /// <summary>
-    /// Sets a busy handler to sleep the specified amount of time when a table is locked.
-    /// The handler will sleep multiple times until a total time of <see cref="BusyTimeout"/> has accumulated.
+    /// When an operation can't be completed because a table is locked, the operation will be regularly repeated until <see cref="BusyTimeout"/> has elapsed.
     /// </summary>
     public TimeSpan BusyTimeout {
-        get => _busyTimeout;
+        get => field;
         set {
-            _busyTimeout = value;
-            if (Handle is not null) {
-                SQLiteRaw.BusyTimeout(Handle, (int)_busyTimeout.TotalMilliseconds);
-            }
+            field = value;
+            SQLiteRaw.BusyTimeout(Handle, (int)field.TotalMilliseconds);
         }
     }
 
@@ -442,21 +422,7 @@ public partial class SQLiteConnection : IDisposable {
     /// </returns>
     public int Execute(string query, params IEnumerable<object?> parameters) {
         SQLiteCommand command = CreateCommand(query, parameters);
-
-        if (TimeExecution) {
-            _stopwatch ??= new Stopwatch();
-            _stopwatch.Reset();
-            _stopwatch.Start();
-        }
-
         int rowCount = command.ExecuteNonQuery();
-
-        if (TimeExecution) {
-            _stopwatch!.Stop();
-            _elapsedMilliseconds += _stopwatch.ElapsedMilliseconds;
-            Tracer?.Invoke($"Finished in {_stopwatch.ElapsedMilliseconds} ms ({(_elapsedMilliseconds / 1000.0):0.0} s total)");
-        }
-
         return rowCount;
     }
 
@@ -478,21 +444,7 @@ public partial class SQLiteConnection : IDisposable {
     /// </returns>
     public T ExecuteScalar<T>(string query, params IEnumerable<object?> parameters) {
         SQLiteCommand command = CreateCommand(query, parameters);
-
-        if (TimeExecution) {
-            _stopwatch ??= new Stopwatch();
-            _stopwatch.Reset();
-            _stopwatch.Start();
-        }
-
         T rowCount = command.ExecuteScalar<T>();
-
-        if (TimeExecution) {
-            _stopwatch!.Stop();
-            _elapsedMilliseconds += _stopwatch.ElapsedMilliseconds;
-            Tracer?.Invoke($"Finished in {_stopwatch.ElapsedMilliseconds} ms ({(_elapsedMilliseconds / 1000.0):0.0} s total)");
-        }
-
         return rowCount;
     }
 
@@ -942,8 +894,6 @@ public partial class SQLiteConnection : IDisposable {
     /// <summary>
     /// Saves a backup of the entire database to the specified path.
     /// </summary>
-    /// <param name="destinationDatabasePath">Path to backup file.</param>
-    /// <param name="databaseName">The name of the database to backup (usually "main").</param>
     public void Backup(string destinationDatabasePath, string databaseName = "main") {
         // Open the destination
         SQLiteRaw.Result result = SQLiteRaw.Open(destinationDatabasePath, out Sqlite3DatabaseHandle destHandle, OpenFlags.Recommended, null);
