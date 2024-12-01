@@ -17,21 +17,12 @@ public class TableQuery<T> : TableQuery, IEnumerable<T> {
     private int? _limit;
     private int? _offset;
 
-    private TableQuery? _joinInner;
-    private Expression? _joinInnerKeySelector;
-    private TableQuery? _joinOuter;
-    private Expression? _joinOuterKeySelector;
-    private Expression? _joinSelector;
-
-    private Expression? _selector;
-
     private TableQuery(SQLiteConnection connection, TableMapping table) {
         Connection = connection;
         Table = table;
     }
-    public TableQuery(SQLiteConnection connection) {
-        Connection = connection;
-        Table = Connection.GetMapping<T>();
+    public TableQuery(SQLiteConnection connection)
+        : this(connection, connection.GetMapping<T>()) {
     }
 
     public TableQuery<U> Clone<U>() {
@@ -40,12 +31,6 @@ public class TableQuery<T> : TableQuery, IEnumerable<T> {
             _orderBys = _orderBys?.ToList(),
             _limit = _limit,
             _offset = _offset,
-            _joinInner = _joinInner,
-            _joinInnerKeySelector = _joinInnerKeySelector,
-            _joinOuter = _joinOuter,
-            _joinOuterKeySelector = _joinOuterKeySelector,
-            _joinSelector = _joinSelector,
-            _selector = _selector,
         };
         return query;
     }
@@ -138,10 +123,6 @@ public class TableQuery<T> : TableQuery, IEnumerable<T> {
     }
 
     private SQLiteCommand GenerateCommand(string selectionList) {
-        if (_joinInner is not null && _joinOuter is not null) {
-            throw new NotSupportedException("Joins are not supported.");
-        }
-
         string commandText = $"select {selectionList} from {Quote(Table.TableName)}";
         List<object?> parameters = [];
         if (_where is not null) {
