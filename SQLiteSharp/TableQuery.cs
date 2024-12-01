@@ -6,10 +6,6 @@ using System.Text;
 namespace SQLiteSharp;
 
 public abstract class TableQuery {
-    protected class Ordering(string columnName, bool ascending) {
-        public string ColumnName { get; } = columnName;
-        public bool Ascending { get; } = ascending;
-    }
 }
 
 public class TableQuery<T> : TableQuery, IEnumerable<T> {
@@ -17,7 +13,7 @@ public class TableQuery<T> : TableQuery, IEnumerable<T> {
     public TableMapping Table { get; }
 
     private Expression? _where;
-    private List<Ordering>? _orderBys;
+    private List<(string ColumnName, bool Ascending)>? _orderBys;
     private int? _limit;
     private int? _offset;
 
@@ -57,44 +53,25 @@ public class TableQuery<T> : TableQuery, IEnumerable<T> {
     /// <summary>
     /// Filters the query based on a predicate.
     /// </summary>
-    public TableQuery<T> Where(Expression<Func<T, bool>> predicateExpression) {
-        if (predicateExpression.NodeType is ExpressionType.Lambda) {
-            LambdaExpression lambda = predicateExpression;
-            Expression pred = lambda.Body;
-            TableQuery<T> query = Clone<T>();
-            query.AddWhere(pred);
-            return query;
-        }
-        else {
-            throw new NotSupportedException("Must be a predicate");
-        }
+    public TableQuery<T> Where(Expression<Func<T, bool>> predicate) {
+        TableQuery<T> query = Clone<T>();
+        query._where = AndAlso(_where, predicate.Body);
+        return query;
     }
 
     /// <summary>
-    /// Delete all the rows that match this query.
+    /// Delete all the rows that match this query (and the given predicate).
     /// </summary>
-    public int Delete() {
-        return Delete(null);
-    }
-    /// <summary>
-    /// Delete all the rows that match this query and the given predicate.
-    /// </summary>
-    public int Delete(Expression<Func<T, bool>>? predicateExpression) {
+    public int Delete(Expression<Func<T, bool>>? predicate = null) {
         if (_limit is not null || _offset is not null) {
             throw new InvalidOperationException("Cannot delete with limits or offsets");
         }
-        if (_where is null && predicateExpression is null) {
-            throw new InvalidOperationException("No condition specified");
-        }
 
-        Expression? predicate = _where;
-        if (predicateExpression is not null && predicateExpression.NodeType is ExpressionType.Lambda) {
-            LambdaExpression lambda = predicateExpression;
-            predicate = predicate is not null ? Expression.AndAlso(predicate, lambda.Body) : lambda.Body;
-        }
-
+        Expression? deletePredicate = AndAlso(_where, predicate)
+            ?? throw new InvalidOperationException($"No delete condition (use SQLiteConnection.DeleteAll to delete every item from the table)");
+        
         List<object?> parameters = [];
-        string commandText = $"delete from {Quote(Table.TableName)} where {CompileExpression(predicate!, parameters).CommandText}";
+        string commandText = $"delete from {Quote(Table.TableName)} where {CompileExpression(deletePredicate, parameters).CommandText}";
         SQLiteCommand command = Connection.CreateCommand(commandText, parameters);
 
         int rowCount = command.ExecuteNonQuery();
@@ -126,13 +103,13 @@ public class TableQuery<T> : TableQuery, IEnumerable<T> {
     }
 
     /// <summary>
-    /// Orders the query results according to a key.
+    /// Orders the query results by a key ascending.
     /// </summary>
     public TableQuery<T> OrderBy<U>(Expression<Func<T, U>> expression) {
         return AddOrderBy(expression, true);
     }
     /// <summary>
-    /// Orders the query results according to a key.
+    /// Orders the query results by a key descending.
     /// </summary>
     public TableQuery<T> OrderByDescending<U>(Expression<Func<T, U>> expression) {
         return AddOrderBy(expression, false);
@@ -149,23 +126,14 @@ public class TableQuery<T> : TableQuery, IEnumerable<T> {
             memberExpression = lambdaExpression.Body as MemberExpression;
         }
 
-        if (memberExpression is not null && memberExpression.Expression?.NodeType is ExpressionType.Parameter) {
+        if (memberExpression?.Expression?.NodeType is ExpressionType.Parameter) {
             TableQuery<T> query = Clone<T>();
             query._orderBys ??= [];
-            query._orderBys.Add(new Ordering(Table.FindColumnByMemberName(memberExpression.Member.Name)!.Name, ascending));
+            query._orderBys.Add((Table.FindColumnByMemberName(memberExpression.Member.Name)!.Name, ascending));
             return query;
         }
         else {
             throw new NotSupportedException($"Order By does not support: {orderExpression}");
-        }
-    }
-
-    private void AddWhere(Expression pred) {
-        if (_where is null) {
-            _where = pred;
-        }
-        else {
-            _where = Expression.AndAlso(_where, pred);
         }
     }
 
@@ -179,8 +147,8 @@ public class TableQuery<T> : TableQuery, IEnumerable<T> {
         if (_where is not null) {
             commandText += $" where {CompileExpression(_where, parameters).CommandText}";
         }
-        if ((_orderBys is not null) && (_orderBys.Count > 0)) {
-            string orderByString = string.Join(", ", _orderBys.Select(orderBy => $"{Quote(orderBy.ColumnName)}" + (orderBy.Ascending ? "" : " desc")));
+        if (_orderBys?.Count > 0) {
+            string orderByString = string.Join(", ", _orderBys.Select(orderBy => Quote(orderBy.ColumnName) + (orderBy.Ascending ? "" : " desc")));
             commandText += $" order by {orderByString}";
         }
         if (_limit is not null) {
@@ -202,15 +170,14 @@ public class TableQuery<T> : TableQuery, IEnumerable<T> {
 
     private CompileResult CompileExpression(Expression expression, List<object?> queryParameters) {
         if (expression is null) {
-            throw new NotSupportedException("Expression is NULL");
+            throw new ArgumentNullException(nameof(expression));
         }
         else if (expression is BinaryExpression binaryExpression) {
             // VB turns 'x=="foo"' into 'CompareString(x,"foo",true/false)==0', so we need to unwrap it
             // http://blogs.msdn.com/b/vbteam/archive/2007/09/18/vb-expression-trees-string-comparisons.aspx
-            if (binaryExpression.Left.NodeType is ExpressionType.Call) {
-                MethodCallExpression call = (MethodCallExpression)binaryExpression.Left;
-                if (call.Method.DeclaringType!.FullName == "Microsoft.VisualBasic.CompilerServices.Operators" && call.Method.Name == "CompareString") {
-                    binaryExpression = Expression.MakeBinary(binaryExpression.NodeType, call.Arguments[0], call.Arguments[1]);
+            if (binaryExpression.Left is MethodCallExpression leftCall) {
+                if (leftCall.Method.DeclaringType?.FullName == "Microsoft.VisualBasic.CompilerServices.Operators" && leftCall.Method.Name == "CompareString") {
+                    binaryExpression = Expression.MakeBinary(binaryExpression.NodeType, leftCall.Arguments[0], leftCall.Arguments[1]);
                 }
             }
 
@@ -313,7 +280,7 @@ public class TableQuery<T> : TableQuery, IEnumerable<T> {
                 sqlCall = "(" + callArguments[0].CommandText + " is null or" + callArguments[0].CommandText + " ='' )";
             }
             else {
-                sqlCall = call.Method.Name.ToLower() + "(" + string.Join(",", callArguments.Select(a => a.CommandText).ToArray()) + ")";
+                sqlCall = call.Method.Name.ToLower() + "(" + string.Join(",", callArguments.Select(callArgument => callArgument.CommandText)) + ")";
             }
 
             return new CompileResult() {

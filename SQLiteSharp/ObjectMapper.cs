@@ -78,8 +78,8 @@ public class ObjectMapper {
     }
 }
 
-public partial class SQLiteCommand(SQLiteConnection conn) {
-    private readonly SQLiteConnection _conn = conn;
+public partial class SQLiteCommand(SQLiteConnection connection) {
+    private readonly SQLiteConnection _connection = connection;
     private readonly List<Binding> _bindings = [];
 
     public string CommandText { get; set; } = "";
@@ -91,15 +91,12 @@ public partial class SQLiteCommand(SQLiteConnection conn) {
 
         switch (result) {
             case SQLiteRaw.Result.Done:
-                int rowCount = SQLiteRaw.Changes(_conn.Handle);
+                int rowCount = SQLiteRaw.Changes(_connection.Handle);
                 return rowCount;
-            case SQLiteRaw.Result.Error:
-                string errorMessage = SQLiteRaw.GetErrorMessage(_conn.Handle);
-                throw new SQLiteException(result, errorMessage);
-            case SQLiteRaw.Result.Constraint when SQLiteRaw.GetExtendedErrorCode(_conn.Handle) is SQLiteRaw.ExtendedResult.ConstraintNotNull:
-                throw new NotNullConstraintViolationException(result, SQLiteRaw.GetErrorMessage(_conn.Handle));
+            case SQLiteRaw.Result.Constraint when SQLiteRaw.GetExtendedErrorCode(_connection.Handle) is SQLiteRaw.ExtendedResult.ConstraintNotNull:
+                throw new NotNullConstraintViolationException(result, SQLiteRaw.GetErrorMessage(_connection.Handle));
             default:
-                throw new SQLiteException(result, SQLiteRaw.GetErrorMessage(_conn.Handle));
+                throw new SQLiteException(result, SQLiteRaw.GetErrorMessage(_connection.Handle));
         }
     }
 
@@ -143,7 +140,7 @@ public partial class SQLiteCommand(SQLiteConnection conn) {
         }
     }
     public IEnumerable<T> ExecuteQuery<T>() {
-        return ExecuteQuery<T>(_conn.GetMapping<T>());
+        return ExecuteQuery<T>(_connection.GetMapping<T>());
     }
 
     public T ExecuteScalar<T>() {
@@ -163,7 +160,7 @@ public partial class SQLiteCommand(SQLiteConnection conn) {
             else if (result is SQLiteRaw.Result.Done) {
             }
             else {
-                throw new SQLiteException(result, SQLiteRaw.GetErrorMessage(_conn.Handle));
+                throw new SQLiteException(result, SQLiteRaw.GetErrorMessage(_connection.Handle));
             }
         }
         finally {
@@ -217,7 +214,7 @@ public partial class SQLiteCommand(SQLiteConnection conn) {
     }
 
     private Sqlite3Statement Prepare() {
-        Sqlite3Statement stmt = SQLiteRaw.Prepare2(_conn.Handle, CommandText);
+        Sqlite3Statement stmt = SQLiteRaw.Prepare2(_connection.Handle, CommandText);
         BindAll(stmt);
         return stmt;
     }

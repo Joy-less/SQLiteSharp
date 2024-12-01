@@ -7,5 +7,5 @@ public record struct SQLiteConnectionOptions(
     string DatabasePath,
     OpenFlags OpenFlags = OpenFlags.Recommended,
     byte[]? EncryptionKey = null,
-    ObjectMapper? mapper = null
+    ObjectMapper? Mapper = null
 );

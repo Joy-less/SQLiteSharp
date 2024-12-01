@@ -5,6 +5,8 @@ global using Sqlite3Statement = SQLitePCL.sqlite3_stmt;
 
 global using static SQLiteSharp.Globals;
 
+using System.Linq.Expressions;
+
 namespace SQLiteSharp;
 
 public static class Globals {
@@ -17,5 +19,19 @@ public static class Globals {
             return "null";
         }
         return $"'{unsafeString.Replace("'", "''")}'";
+    }
+    public static Expression? AndAlso(Expression? left, Expression? right) {
+        if (left is not null && right is not null) {
+            return Expression.AndAlso(left, right);
+        }
+        else if (left is not null) {
+            return left;
+        }
+        else if (right is not null) {
+            return right;
+        }
+        else {
+            return null;
+        }
     }
 }
