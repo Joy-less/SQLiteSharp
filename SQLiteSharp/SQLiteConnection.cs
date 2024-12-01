@@ -14,8 +14,6 @@ public partial class SQLiteConnection : IDisposable {
 
     public Sqlite3DatabaseHandle Handle { get; }
 
-    public event EventHandler<NotifyTableChangedEventArgs>? OnTableChanged;
-
     private TimeSpan _busyTimeout;
     private Stopwatch? _stopwatch;
     private long _elapsedMilliseconds = 0;
@@ -724,24 +722,11 @@ public partial class SQLiteConnection : IDisposable {
             query = $"insert {modifier} into \"{map.TableName}\"({columnsSql}) values ({valuesSql})";
         }
 
-        int rowCount = 0;
-        try {
-            rowCount = Execute(query, values);
-        }
-        catch (SQLiteException ex) {
-            if (ex.Result is SQLiteRaw.Result.Constraint && SQLiteRaw.GetExtendedErrorCode(Handle) is SQLiteRaw.ExtendedResult.ConstraintNotNull) {
-                throw new NotNullConstraintViolationException(ex, map, obj);
-            }
-            throw;
-        }
+        int rowCount = Execute(query, values);
 
         if (map.HasAutoIncrementedPrimaryKey) {
             long id = SQLiteRaw.GetLastInsertRowid(Handle);
             map.SetAutoIncrementedPrimaryKey(obj, id);
-        }
-
-        if (rowCount > 0) {
-            InvokeTableChanged(map, NotifyTableChangedAction.Update);
         }
 
         return rowCount;
@@ -873,21 +858,7 @@ public partial class SQLiteConnection : IDisposable {
         parameters.Add(primaryKey.GetValue(obj));
         string query = $"update \"{map.TableName}\" set {string.Join(",", columns.Select(column => $"\"{column.Name}\" = ? "))} where \"{primaryKey.Name}\" = ?";
 
-        int rowCount = 0;
-        try {
-            rowCount = Execute(query, parameters);
-        }
-        catch (SQLiteException ex) {
-            if (ex.Result is SQLiteRaw.Result.Constraint && SQLiteRaw.GetExtendedErrorCode(Handle) is SQLiteRaw.ExtendedResult.ConstraintNotNull) {
-                throw new NotNullConstraintViolationException(ex, map, obj);
-            }
-            throw;
-        }
-
-        if (rowCount > 0) {
-            InvokeTableChanged(map, NotifyTableChangedAction.Update);
-        }
-
+        int rowCount = Execute(query, parameters);
         return rowCount;
     }
 
@@ -930,10 +901,8 @@ public partial class SQLiteConnection : IDisposable {
         TableMapping.Column primaryKeyColumn = map.PrimaryKey
             ?? throw new NotSupportedException($"Can't delete in table '{map.TableName}' since it has no primary key");
         string query = $"delete from \"{map.TableName}\" where \"{primaryKeyColumn.Name}\" = ?";
-        int count = Execute(query, primaryKey);
-        if (count > 0)
-            InvokeTableChanged(map, NotifyTableChangedAction.Delete);
-        return count;
+        int rowCount = Execute(query, primaryKey);
+        return rowCount;
     }
     /// <inheritdoc cref="Delete(object, TableMapping)"/>
     public int Delete<T>(object primaryKey) {
@@ -963,9 +932,6 @@ public partial class SQLiteConnection : IDisposable {
     public int DeleteAll(TableMapping map) {
         string query = $"delete from \"{map.TableName}\"";
         int count = Execute(query);
-        if (count > 0) {
-            InvokeTableChanged(map, NotifyTableChangedAction.Delete);
-        }
         return count;
     }
     /// <inheritdoc cref="DeleteAll(TableMapping)"/>
@@ -1178,19 +1144,4 @@ public partial class SQLiteConnection : IDisposable {
     public Task ChangeKeyAsync(byte[] key) {
         return Task.Run(() => ChangeKey(key));
     }
-
-    private void InvokeTableChanged(TableMapping table, NotifyTableChangedAction action) {
-        OnTableChanged?.Invoke(this, new NotifyTableChangedEventArgs(table, action));
-    }
-}
-
-public class NotifyTableChangedEventArgs(TableMapping table, NotifyTableChangedAction action) : EventArgs {
-    public TableMapping Table { get; } = table;
-    public NotifyTableChangedAction Action { get; } = action;
-}
-
-public enum NotifyTableChangedAction {
-    Insert,
-    Update,
-    Delete,
 }

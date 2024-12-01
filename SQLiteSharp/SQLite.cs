@@ -97,20 +97,18 @@ public partial class SQLiteCommand(SQLiteConnection conn) {
         SQLiteRaw.Result result = SQLiteRaw.Step(statement);
         SQLiteRaw.Finalize(statement);
 
-        if (result is SQLiteRaw.Result.Done) {
-            int rowCount = SQLiteRaw.Changes(_conn.Handle);
-            return rowCount;
-        }
-        else if (result is SQLiteRaw.Result.Error) {
-            string msg = SQLiteRaw.GetErrorMessage(_conn.Handle);
-            throw new SQLiteException(result, msg);
-        }
-        else if (result is SQLiteRaw.Result.Constraint) {
-            if (SQLiteRaw.GetExtendedErrorCode(_conn.Handle) is SQLiteRaw.ExtendedResult.ConstraintNotNull) {
+        switch (result) {
+            case SQLiteRaw.Result.Done:
+                int rowCount = SQLiteRaw.Changes(_conn.Handle);
+                return rowCount;
+            case SQLiteRaw.Result.Error:
+                string errorMessage = SQLiteRaw.GetErrorMessage(_conn.Handle);
+                throw new SQLiteException(result, errorMessage);
+            case SQLiteRaw.Result.Constraint when SQLiteRaw.GetExtendedErrorCode(_conn.Handle) is SQLiteRaw.ExtendedResult.ConstraintNotNull:
                 throw new NotNullConstraintViolationException(result, SQLiteRaw.GetErrorMessage(_conn.Handle));
-            }
+            default:
+                throw new SQLiteException(result, SQLiteRaw.GetErrorMessage(_conn.Handle));
         }
-        throw new SQLiteException(result, SQLiteRaw.GetErrorMessage(_conn.Handle));
     }
 
     /// <summary>
