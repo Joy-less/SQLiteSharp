@@ -4,73 +4,10 @@ using System.Linq.Expressions;
 
 namespace SQLiteSharp;
 
-public interface ISQLiteAsyncConnection {
-    string DatabasePath { get; }
-    int SQLiteVersionNumber { get; }
-    bool Trace { get; set; }
-    Action<string> Tracer { get; set; }
-    bool TimeExecution { get; set; }
-    IEnumerable<TableMapping> TableMappings { get; }
-
-    Task BackupAsync(string destinationDatabasePath, string databaseName = "main");
-    Task CloseAsync();
-    Task<int> CreateIndexAsync(string tableName, string columnName, bool unique = false);
-    Task<int> CreateIndexAsync(string indexName, string tableName, string columnName, bool unique = false);
-    Task<int> CreateIndexAsync(string tableName, string[] columnNames, bool unique = false);
-    Task<int> CreateIndexAsync(string indexName, string tableName, string[] columnNames, bool unique = false);
-    Task<int> CreateIndexAsync<T>(Expression<Func<T, object>> property, bool unique = false);
-    Task<CreateTableResult> CreateTableAsync<T>(CreateFlags createFlags = CreateFlags.None) where T : new();
-    Task<CreateTableResult> CreateTableAsync(Type type, CreateFlags createFlags = CreateFlags.None);
-    Task<CreateTablesResult> CreateTablesAsync(IEnumerable<Type> types, CreateFlags createFlags = CreateFlags.None);
-    Task<IEnumerable<T>> DeferredQueryAsync<T>(string query, params IEnumerable<object?> parameters) where T : new();
-    Task<IEnumerable<object>> DeferredQueryAsync(TableMapping map, string query, params IEnumerable<object?> parameters);
-    Task<int> DeleteAllAsync<T>();
-    Task<int> DeleteAllAsync(TableMapping map);
-    Task<int> DeleteAsync(object objectToDelete);
-    Task<int> DeleteAsync<T>(object primaryKey);
-    Task<int> DeleteAsync(object primaryKey, TableMapping map);
-    Task<int> DropTableAsync<T>() where T : new();
-    Task<int> DropTableAsync(TableMapping map);
-    Task EnableLoadExtensionAsync(bool enabled);
-    Task EnableWriteAheadLoggingAsync();
-    Task<int> ExecuteAsync(string query, params IEnumerable<object?> parameters);
-    Task<T> ExecuteScalarAsync<T>(string query, params IEnumerable<object?> parameters);
-    Task<T?> FindAsync<T>(object pk) where T : new();
-    Task<object?> FindAsync(object pk, TableMapping map);
-    Task<T?> FindAsync<T>(Expression<Func<T, bool>> predicate) where T : new();
-    Task<T?> FindWithQueryAsync<T>(string query, params IEnumerable<object?> parameters) where T : new();
-    Task<object?> FindWithQueryAsync(TableMapping map, string query, params IEnumerable<object?> parameters);
-    Task<T> GetAsync<T>(object pk) where T : new();
-    Task<object> GetAsync(object pk, TableMapping map);
-    Task<T> GetAsync<T>(Expression<Func<T, bool>> predicate) where T : new();
-    TimeSpan GetBusyTimeout();
-    SQLiteConnectionWithLock GetConnection();
-    Task<TableMapping> GetMappingAsync(Type type, CreateFlags createFlags = CreateFlags.None);
-    Task<TableMapping> GetMappingAsync<T>(CreateFlags createFlags = CreateFlags.None) where T : new();
-    Task<List<SQLiteConnection.ColumnInfo>> GetTableInfoAsync(string tableName);
-    Task<int> InsertAsync(object obj, string? modifier = null);
-    Task<int> InsertAllAsync(IEnumerable objects, string? modifier = null, bool runInTransaction = true);
-    Task<int> InsertOrReplaceAsync(object obj);
-    Task<int> InsertOrReplaceAllAsync(IEnumerable objects, bool runInTransaction = true);
-    Task<int> InsertOrIgnoreAsync(object obj);
-    Task<int> InsertOrIgnoreAllAsync(IEnumerable objects, bool runInTransaction = true);
-    Task<List<T>> QueryAsync<T>(string query, params IEnumerable<object?> parameters) where T : new();
-    Task<List<object>> QueryAsync(TableMapping map, string query, params IEnumerable<object?> parameters);
-    Task<List<T>> QueryScalarsAsync<T>(string query, params IEnumerable<object?> parameters);
-    Task ReKeyAsync(string key);
-    Task ReKeyAsync(byte[] key);
-    Task RunInTransactionAsync(Action<SQLiteConnection> action);
-    Task SetBusyTimeoutAsync(TimeSpan value);
-    AsyncTableQuery<T> Table<T>() where T : new();
-    Task<int> UpdateAllAsync(IEnumerable objects, bool runInTransaction = true);
-    Task<int> UpdateAsync(object obj);
-    Task<int> UpdateAsync(object obj, Type objType);
-}
-
 /// <summary>
 /// A pooled asynchronous connection to a SQLite database.
 /// </summary>
-public partial class SQLiteAsyncConnection : ISQLiteAsyncConnection {
+public partial class SQLiteAsyncConnection {
     private readonly SQLiteConnectionString _connectionString;
 
     /// <summary>
@@ -83,7 +20,7 @@ public partial class SQLiteAsyncConnection : ISQLiteAsyncConnection {
     /// Flags controlling how the connection should be opened.
     /// Async connections should have the FullMutex flag set to provide best performance.
     /// </param>
-    public SQLiteAsyncConnection(string databasePath, SQLiteOpenFlags openFlags = SQLiteOpenFlags.Create | SQLiteOpenFlags.ReadWrite | SQLiteOpenFlags.FullMutex)
+    public SQLiteAsyncConnection(string databasePath, OpenFlags openFlags = OpenFlags.Create | OpenFlags.ReadWrite | OpenFlags.FullMutex)
         : this(new SQLiteConnectionString(databasePath, openFlags)) {
     }
 
@@ -241,7 +178,7 @@ public partial class SQLiteAsyncConnection : ISQLiteAsyncConnection {
     /// <returns>
     /// Whether the table was created or migrated for each type.
     /// </returns>
-    public Task<CreateTablesResult> CreateTablesAsync(IEnumerable<Type> types, CreateFlags createFlags = CreateFlags.None) {
+    public Task<Dictionary<Type, CreateTableResult>> CreateTablesAsync(IEnumerable<Type> types, CreateFlags createFlags = CreateFlags.None) {
         return LockAsync(connection => connection.CreateTables(types, createFlags));
     }
     /// <summary>
@@ -755,7 +692,7 @@ public partial class SQLiteAsyncConnection : ISQLiteAsyncConnection {
     /// <returns>
     /// A list with one result for each row returned by the query.
     /// </returns>
-    public Task<List<T>> QueryAsync<T>(string query, params IEnumerable<object?> parameters) where T : new() {
+    public Task<IEnumerable<T>> QueryAsync<T>(string query, params IEnumerable<object?> parameters) where T : new() {
         return LockAsync(connection => connection.Query<T>(query, parameters));
     }
 
@@ -797,7 +734,7 @@ public partial class SQLiteAsyncConnection : ISQLiteAsyncConnection {
     /// <returns>
     /// An enumerable with one result for each row returned by the query.
     /// </returns>
-    public Task<List<object>> QueryAsync(TableMapping map, string query, params IEnumerable<object?> parameters) {
+    public Task<IEnumerable<object>> QueryAsync(TableMapping map, string query, params IEnumerable<object?> parameters) {
         return LockAsync(connection => connection.Query(map, query, parameters));
     }
 
@@ -1011,7 +948,7 @@ internal class SQLiteConnectionPool {
             Connection = new SQLiteConnectionWithLock(ConnectionString);
 
             // If the database is FullMutex, don't bother locking
-            if (ConnectionString.OpenFlags.HasFlag(SQLiteOpenFlags.FullMutex)) {
+            if (ConnectionString.OpenFlags.HasFlag(OpenFlags.FullMutex)) {
                 Connection.SkipLock = true;
             }
         }
@@ -1019,7 +956,7 @@ internal class SQLiteConnectionPool {
         public void Close() {
             SQLiteConnectionWithLock? connection = Connection;
             Connection = null;
-            connection?.Close();
+            connection?.Dispose();
         }
     }
 
@@ -1031,7 +968,7 @@ internal class SQLiteConnectionPool {
     public static SQLiteConnectionPool Shared { get; } = new();
 
     public SQLiteConnectionWithLock GetConnection(SQLiteConnectionString connectionString) {
-        return GetConnectionAndTransactionLock(connectionString, out var _);
+        return GetConnectionAndTransactionLock(connectionString, out _);
     }
     public SQLiteConnectionWithLock GetConnectionAndTransactionLock(SQLiteConnectionString connectionString, out object transactionLock) {
         Entry entry = _entries.GetOrAdd(connectionString.UniqueKey, key => new Entry(connectionString));
@@ -1060,7 +997,7 @@ public class SQLiteConnectionWithLock : SQLiteConnection {
     }
 
     /// <summary>
-    /// Whether to skip using the monitor lock (used when <see cref="SQLiteOpenFlags.FullMutex"/> is enabled).
+    /// Whether to skip using the monitor lock (used when <see cref="OpenFlags.FullMutex"/> is enabled).
     /// </summary>
     public bool SkipLock { get; set; }
 
