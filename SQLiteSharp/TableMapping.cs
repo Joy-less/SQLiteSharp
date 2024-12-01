@@ -72,7 +72,7 @@ public class TableMapping {
         public bool NotNull { get; }
         public int? MaxStringLength { get; }
         public bool StoreAsText { get; }
-        public IEnumerable<IndexedAttribute> Indices { get; }
+        public IEnumerable<IndexedAttribute> Indexes { get; }
 
         public Column(MemberInfo member, CreateFlags createFlags = CreateFlags.None) {
             MemberInfo = member;
@@ -85,18 +85,18 @@ public class TableMapping {
             Collation = ObjectMapper.GetCollation(member);
 
             PrimaryKey = ObjectMapper.IsPrimaryKey(member)
-                || (createFlags.HasFlag(CreateFlags.ImplicitPrimaryKey) && string.Equals(member.Name, ObjectMapper.ImplicitPrimaryKeyName, StringComparison.OrdinalIgnoreCase));
+                || (createFlags.HasFlag(CreateFlags.ImplicitPrimaryKey) && string.Equals(member.Name, ObjectMapper.ImplicitPrimaryKeyName));
 
             bool isAutoIncrement = ObjectMapper.IsAutoIncrement(member) || (PrimaryKey && createFlags.HasFlag(CreateFlags.AutoIncrementPrimaryKey));
             AutoGuid = isAutoIncrement && Type == typeof(Guid);
             AutoIncrement = isAutoIncrement && !AutoGuid;
 
-            Indices = ObjectMapper.GetIndices(member);
-            if (!Indices.Any() && !PrimaryKey && createFlags.HasFlag(CreateFlags.ImplicitIndex) && Name.EndsWith(ObjectMapper.ImplicitIndexSuffix, StringComparison.OrdinalIgnoreCase)) {
-                Indices = [new IndexedAttribute()];
+            Indexes = ObjectMapper.GetIndexes(member);
+            if (!Indexes.Any() && !PrimaryKey && createFlags.HasFlag(CreateFlags.ImplicitIndex) && Name.EndsWith(ObjectMapper.ImplicitIndexSuffix)) {
+                Indexes = [new IndexedAttribute()];
             }
-            NotNull = PrimaryKey || ObjectMapper.IsMarkedNotNull(member);
-            MaxStringLength = ObjectMapper.MaxStringLength(member);
+            NotNull = PrimaryKey || ObjectMapper.IsNotNullConstrained(member);
+            MaxStringLength = ObjectMapper.GetMaxStringLength(member);
 
             StoreAsText = memberType.GetCustomAttribute<StoreByNameAttribute>() is not null;
         }

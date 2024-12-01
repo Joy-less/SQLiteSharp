@@ -40,8 +40,8 @@ public partial class SQLiteConnection : IDisposable {
 
         BusyTimeout = TimeSpan.FromSeconds(1.0);
 
-        if (options.Key is not null) {
-            SQLiteRaw.SetKey(Handle, options.Key);
+        if (options.EncryptionKey is not null) {
+            SQLiteRaw.SetKey(Handle, options.EncryptionKey);
         }
     }
     /// <inheritdoc cref="SQLiteConnection(SQLiteConnectionOptions)"/>
@@ -205,7 +205,7 @@ public partial class SQLiteConnection : IDisposable {
         // Get indexes to create for columns
         Dictionary<string, IndexInfo> indexes = [];
         foreach (TableMapping.Column column in map.Columns) {
-            foreach (IndexedAttribute index in column.Indices) {
+            foreach (IndexedAttribute index in column.Indexes) {
                 string indexName = index.Name ?? map.TableName + "_" + column.Name;
                 if (!indexes.TryGetValue(indexName, out IndexInfo indexInfo)) {
                     indexInfo = new IndexInfo() {

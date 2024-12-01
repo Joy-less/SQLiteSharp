@@ -7,12 +7,12 @@ public enum CreateFlags {
     /// </summary>
     None = 1,
     /// <summary>
-    /// Create a primary key index for a property called 'Id' (case-insensitive).<br/>
+    /// Create a primary key index for a property called 'Id' (case-sensitive).<br/>
     /// This avoids the need for the [<see cref="PrimaryKeyAttribute"/>].
     /// </summary>
     ImplicitPrimaryKey = 2,
     /// <summary>
-    /// Create indices for properties ending in 'Id' (case-insensitive).
+    /// Create indexes for properties ending in 'Id' (case-sensitive).
     /// </summary>
     ImplicitIndex = 4,
     /// <summary>

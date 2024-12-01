@@ -64,19 +64,17 @@ public class ObjectMapper {
     public static bool IsAutoIncrement(MemberInfo memberInfo) {
         return memberInfo.GetCustomAttribute<AutoIncrementAttribute>() is not null;
     }
+    public static bool IsNotNullConstrained(MemberInfo memberInfo) {
+        return memberInfo.GetCustomAttribute<NotNullAttribute>() is not null;
+    }
     public static string GetCollation(MemberInfo memberInfo) {
 		return memberInfo.GetCustomAttribute<CollationAttribute>()?.Value ?? CollationType.Binary;
     }
-
-    public static IEnumerable<IndexedAttribute> GetIndices(MemberInfo memberInfo) {
+    public static IEnumerable<IndexedAttribute> GetIndexes(MemberInfo memberInfo) {
         return memberInfo.GetCustomAttributes<IndexedAttribute>();
     }
-    public static int? MaxStringLength(MemberInfo memberInfo) {
+    public static int? GetMaxStringLength(MemberInfo memberInfo) {
         return memberInfo.GetCustomAttribute<MaxLengthAttribute>()?.Value;
-    }
-
-    public static bool IsMarkedNotNull(MemberInfo memberInfo) {
-        return memberInfo.GetCustomAttribute<NotNullAttribute>() is not null;
     }
 }
 
