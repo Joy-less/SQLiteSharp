@@ -176,17 +176,12 @@ public partial class SQLiteConnection : IDisposable {
                     throw new Exception("Every column in an index must have the same value for their Unique property.");
                 }
 
-                indexInfo.Columns.Add(new IndexedColumn() {
-                    Order = index.Order,
-                    ColumnName = column.Name,
-                });
+                indexInfo.Columns.Add(column.Name);
             }
         }
         // Create indexes for columns
-        foreach (string indexName in indexes.Keys) {
-            IndexInfo index = indexes[indexName];
-            string[] columns = index.Columns.OrderBy(i => i.Order).Select(i => i.ColumnName).ToArray();
-            CreateIndex(indexName, index.TableName, columns, index.Unique);
+        foreach (IndexInfo index in indexes.Values) {
+            CreateIndex(index.IndexName, index.TableName, index.Columns, index.Unique);
         }
 
         return result;
@@ -970,14 +965,9 @@ public partial class SQLiteConnection : IDisposable {
     }
 }
 
-file struct IndexedColumn {
-    public int Order;
-    public string ColumnName;
-}
-
 file struct IndexInfo {
     public string IndexName;
     public string TableName;
     public bool Unique;
-    public List<IndexedColumn> Columns;
+    public List<string> Columns;
 }
