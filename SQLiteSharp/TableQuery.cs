@@ -188,7 +188,7 @@ public class TableQuery<T>(SQLiteConnection connection, TableMap table) : IEnume
         else if (expression.NodeType is ExpressionType.Call) {
             MethodCallExpression call = (MethodCallExpression)expression;
             CompileResult[] callArguments = new CompileResult[call.Arguments.Count];
-            CompileResult? callTarget = call.Object is not null ? CompileExpression(call.Object, queryParameters) : null;
+            CompileResult callTarget = call.Object is not null ? CompileExpression(call.Object, queryParameters) : default;
 
             for (int i = 0; i < callArguments.Length; i++) {
                 callArguments[i] = CompileExpression(call.Arguments[i], queryParameters);
@@ -200,14 +200,30 @@ public class TableQuery<T>(SQLiteConnection connection, TableMap table) : IEnume
                 sqlCall = "(" + callArguments[0].CommandText + " like " + callArguments[1].CommandText + ")";
             }
             else if (call.Method.Name is "Contains" && callArguments.Length == 2) {
-                sqlCall = "(" + callArguments[1].CommandText + " in " + callArguments[0].CommandText + ")";
-            }
-            else if (call.Method.Name is "Contains" && callArguments.Length == 1) {
-                if (call.Object != null && call.Object.Type == typeof(string)) {
-                    sqlCall = "( instr(" + callTarget!.Value.CommandText + "," + callArguments[0].CommandText + ") >0 )";
+                // string.Contains(string, StringComparison)
+                if (call.Object?.Type == typeof(string)) {
+                    StringComparison comparison = (StringComparison)callArguments[1].Value!;
+                    switch (comparison) {
+                        case StringComparison.Ordinal:
+                        case StringComparison.CurrentCulture:
+                            sqlCall = "( instr(" + callTarget.CommandText + "," + callArguments[0].CommandText + ") >0 )";
+                            break;
+                        case StringComparison.OrdinalIgnoreCase:
+                        case StringComparison.CurrentCultureIgnoreCase:
+                            sqlCall = "(" + callTarget.CommandText + " like ( '%' || " + callArguments[0].CommandText + " || '%'))";
+                            break;
+                    }
                 }
                 else {
-                    sqlCall = "(" + callArguments[0].CommandText + " in " + callTarget!.Value.CommandText + ")";
+                    sqlCall = "(" + callArguments[1].CommandText + " in " + callArguments[0].CommandText + ")";
+                }
+            }
+            else if (call.Method.Name is "Contains" && callArguments.Length == 1) {
+                if (call.Object is not null && call.Object.Type == typeof(string)) {
+                    sqlCall = "( instr(" + callTarget.CommandText + "," + callArguments[0].CommandText + ") >0 )";
+                }
+                else {
+                    sqlCall = "(" + callArguments[0].CommandText + " in " + callTarget.CommandText + ")";
                 }
             }
             else if (call.Method.Name is "StartsWith" && callArguments.Length >= 1) {
@@ -217,10 +233,10 @@ public class TableQuery<T>(SQLiteConnection connection, TableMap table) : IEnume
                 }
                 switch (comparisonType) {
                     case StringComparison.Ordinal or StringComparison.CurrentCulture:
-                        sqlCall = "( substr(" + callTarget!.Value.CommandText + ", 1, " + callArguments[0].Value!.ToString()!.Length + ") =  " + callArguments[0].CommandText + ")";
+                        sqlCall = "( substr(" + callTarget.CommandText + ", 1, " + callArguments[0].Value!.ToString()!.Length + ") =  " + callArguments[0].CommandText + ")";
                         break;
                     case StringComparison.OrdinalIgnoreCase or StringComparison.CurrentCultureIgnoreCase:
-                        sqlCall = "(" + callTarget!.Value.CommandText + " like (" + callArguments[0].CommandText + " || '%'))";
+                        sqlCall = "(" + callTarget.CommandText + " like (" + callArguments[0].CommandText + " || '%'))";
                         break;
                 }
             }
@@ -231,24 +247,24 @@ public class TableQuery<T>(SQLiteConnection connection, TableMap table) : IEnume
                 }
                 switch (comparisonType) {
                     case StringComparison.Ordinal or StringComparison.CurrentCulture:
-                        sqlCall = "( substr(" + callTarget!.Value.CommandText + ", length(" + callTarget.Value.CommandText + ") - " + callArguments[0].Value!.ToString()!.Length + "+1, " + callArguments[0].Value!.ToString()!.Length + ") =  " + callArguments[0].CommandText + ")";
+                        sqlCall = "( substr(" + callTarget.CommandText + ", length(" + callTarget.CommandText + ") - " + callArguments[0].Value!.ToString()!.Length + "+1, " + callArguments[0].Value!.ToString()!.Length + ") =  " + callArguments[0].CommandText + ")";
                         break;
                     case StringComparison.OrdinalIgnoreCase or StringComparison.CurrentCultureIgnoreCase:
-                        sqlCall = "(" + callTarget!.Value.CommandText + " like ('%' || " + callArguments[0].CommandText + "))";
+                        sqlCall = "(" + callTarget.CommandText + " like ('%' || " + callArguments[0].CommandText + "))";
                         break;
                 }
             }
             else if (call.Method.Name is "Equals" && callArguments.Length == 1) {
-                sqlCall = "(" + callTarget!.Value.CommandText + " = (" + callArguments[0].CommandText + "))";
+                sqlCall = "(" + callTarget.CommandText + " = (" + callArguments[0].CommandText + "))";
             }
             else if (call.Method.Name is "ToLower") {
-                sqlCall = "(lower(" + callTarget!.Value.CommandText + "))";
+                sqlCall = "(lower(" + callTarget.CommandText + "))";
             }
             else if (call.Method.Name is "ToUpper") {
-                sqlCall = "(upper(" + callTarget!.Value.CommandText + "))";
+                sqlCall = "(upper(" + callTarget.CommandText + "))";
             }
             else if (call.Method.Name is "Replace" && callArguments.Length == 2) {
-                sqlCall = "(replace(" + callTarget!.Value.CommandText + "," + callArguments[0].CommandText + "," + callArguments[1].CommandText + "))";
+                sqlCall = "(replace(" + callTarget.CommandText + "," + callArguments[0].CommandText + "," + callArguments[1].CommandText + "))";
             }
             else if (call.Method.Name is "IsNullOrEmpty" && callArguments.Length == 1) {
                 sqlCall = "(" + callArguments[0].CommandText + " is null or" + callArguments[0].CommandText + " ='' )";
