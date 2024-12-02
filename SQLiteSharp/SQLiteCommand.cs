@@ -1,121 +1,37 @@
-using System.Text;
-using System.Reflection;
+﻿namespace SQLiteSharp;
 
-namespace SQLiteSharp;
-
-public class ObjectMapper {
-    public const string ImplicitPrimaryKeyName = "Id";
-    public const string ImplicitIndexSuffix = "Id";
-
-    public static string GetSqlDeclaration(TableMapping.Column column) {
-        string declaration = $"{Quote(column.Name)} {Quote(GetSqlType(column))} collate {Quote(column.Collation)} ";
-
-        if (column.PrimaryKey) {
-            declaration += "primary key ";
-        }
-        if (column.AutoIncrement) {
-            declaration += "autoincrement ";
-        }
-        if (column.NotNull) {
-            declaration += "not null ";
-        }
-
-        return declaration;
-    }
-    public static string GetSqlType(TableMapping.Column column) {
-        Type clrType = column.Type;
-        if (clrType == typeof(bool) || clrType == typeof(byte) || clrType == typeof(sbyte) || clrType == typeof(short) || clrType == typeof(ushort) || clrType == typeof(int) || clrType == typeof(uint) || clrType == typeof(long) || clrType == typeof(ulong)) {
-            return "integer";
-        }
-        else if (clrType == typeof(float) || clrType == typeof(double) || clrType == typeof(decimal)) {
-            return "float";
-        }
-        else if (clrType == typeof(string) || clrType == typeof(StringBuilder) || clrType == typeof(Uri) || clrType == typeof(UriBuilder)) {
-            if (column.MaxStringLength is int maxStringLength) {
-                return "varchar(" + maxStringLength + ")";
-            }
-            return "varchar";
-        }
-        else if (clrType == typeof(TimeSpan)) {
-            return "bigint";
-        }
-        else if (clrType == typeof(DateTime)) {
-            return "bigint";
-        }
-        else if (clrType == typeof(DateTimeOffset)) {
-            return "blob";
-        }
-        else if (clrType.IsEnum) {
-            return column.StoreAsText ? "varchar" : "integer";
-        }
-        else if (clrType == typeof(byte[])) {
-            return "blob";
-        }
-        else if (clrType == typeof(Guid)) {
-            return "varchar(36)";
-        }
-        else {
-            throw new NotSupportedException("Don't know about " + clrType);
-        }
-    }
-    public static bool IsPrimaryKey(MemberInfo memberInfo) {
-        return memberInfo.GetCustomAttribute<PrimaryKeyAttribute>() is not null;
-    }
-    public static bool IsAutoIncrement(MemberInfo memberInfo) {
-        return memberInfo.GetCustomAttribute<AutoIncrementAttribute>() is not null;
-    }
-    public static bool IsNotNullConstrained(MemberInfo memberInfo) {
-        return memberInfo.GetCustomAttribute<NotNullAttribute>() is not null;
-    }
-    public static string GetCollation(MemberInfo memberInfo) {
-		return memberInfo.GetCustomAttribute<CollationAttribute>()?.Value ?? CollationType.Binary;
-    }
-    public static IEnumerable<IndexedAttribute> GetIndexes(MemberInfo memberInfo) {
-        return memberInfo.GetCustomAttributes<IndexedAttribute>();
-    }
-    public static int? GetMaxStringLength(MemberInfo memberInfo) {
-        return memberInfo.GetCustomAttribute<MaxLengthAttribute>()?.Value;
-    }
-}
-
-public partial class SQLiteCommand(SQLiteConnection connection) {
-    private readonly SQLiteConnection _connection = connection;
-    private readonly List<Binding> _bindings = [];
-
+public class SQLiteCommand(SQLiteConnection connection) {
+    public SQLiteConnection Connection { get; } = connection;
     public string CommandText { get; set; } = "";
+
+    public event Action<object>? OnInstanceCreated;
+
+    private readonly List<Parameter> Parameters = [];
+
+    public override string ToString() {
+        return $"{CommandText} [{string.Join(", ", Parameters)}]";
+    }
 
     public int ExecuteNonQuery() {
         Sqlite3Statement statement = Prepare();
-        SQLiteRaw.Result result = SQLiteRaw.Step(statement);
+        Result result = SQLiteRaw.Step(statement);
         SQLiteRaw.Finalize(statement);
 
         switch (result) {
-            case SQLiteRaw.Result.Done:
-                int rowCount = SQLiteRaw.Changes(_connection.Handle);
+            case Result.Done:
+                int rowCount = SQLiteRaw.Changes(Connection.Handle);
                 return rowCount;
-            case SQLiteRaw.Result.Constraint when SQLiteRaw.GetExtendedErrorCode(_connection.Handle) is SQLiteRaw.ExtendedResult.ConstraintNotNull:
-                throw new NotNullConstraintViolationException(result, SQLiteRaw.GetErrorMessage(_connection.Handle));
+            case Result.Constraint when SQLiteRaw.GetExtendedErrorCode(Connection.Handle) is ExtendedResult.ConstraintNotNull:
+                throw new NotNullConstraintViolationException(result, SQLiteRaw.GetErrorMessage(Connection.Handle));
             default:
-                throw new SQLiteException(result, SQLiteRaw.GetErrorMessage(_connection.Handle));
+                throw new SQLiteException(result, SQLiteRaw.GetErrorMessage(Connection.Handle));
         }
     }
-
-    /// <summary>
-    /// Invoked every time an instance is loaded from the database.
-    /// </summary>
-    /// <param name='obj'>
-    /// The newly created object.
-    /// </param>
-    /// <remarks>
-    /// This can be overridden in combination with the <see cref="SQLiteConnection.NewCommand"/> method to hook into the life-cycle of objects.
-    /// </remarks>
-    protected virtual void OnInstanceCreated(object obj) { }
-
-    public IEnumerable<object> ExecuteQuery(TableMapping map) {
+    public IEnumerable<object> ExecuteQuery(TableMap map) {
         Sqlite3Statement statement = Prepare();
         try {
-            while (SQLiteRaw.Step(statement) is SQLiteRaw.Result.Row) {
-                object obj = Activator.CreateInstance(map.MappedType)!;
+            while (SQLiteRaw.Step(statement) is Result.Row) {
+                object obj = Activator.CreateInstance(map.Type)!;
 
                 // Iterate through found columns
                 int columnCount = SQLiteRaw.GetColumnCount(statement);
@@ -123,15 +39,14 @@ public partial class SQLiteCommand(SQLiteConnection connection) {
                     // Get name of found column
                     string columnName = SQLiteRaw.GetColumnName(statement, i);
                     // Find mapped column with same name
-                    if (map.FindColumnByColumnName(columnName) is not TableMapping.Column column) {
+                    if (map.FindColumnByColumnName(columnName) is not ColumnMap column) {
                         continue;
                     }
                     // Read value from found column
-                    SQLiteRaw.ColumnType columnType = SQLiteRaw.GetColumnType(statement, i);
-                    object? value = ReadColumn(statement, i, columnType, column.Type);
+                    object? value = Connection.Orm.ReadColumn(statement, i, column.ClrType);
                     column.SetValue(obj, value);
                 }
-                OnInstanceCreated(obj);
+                OnInstanceCreated?.Invoke(obj);
                 yield return obj;
             }
         }
@@ -139,31 +54,29 @@ public partial class SQLiteCommand(SQLiteConnection connection) {
             SQLiteRaw.Finalize(statement);
         }
     }
-    public IEnumerable<T> ExecuteQuery<T>(TableMapping map) {
+    public IEnumerable<T> ExecuteQuery<T>(TableMap map) {
         return ExecuteQuery(map).Cast<T>();
     }
     public IEnumerable<T> ExecuteQuery<T>() {
-        return ExecuteQuery<T>(_connection.GetMapping<T>());
+        return ExecuteQuery<T>(Connection.MapTable<T>());
     }
-
     public T ExecuteScalar<T>() {
         T Value = default!;
 
         Sqlite3Statement stmt = Prepare();
 
         try {
-            SQLiteRaw.Result result = SQLiteRaw.Step(stmt);
-            if (result is SQLiteRaw.Result.Row) {
-                SQLiteRaw.ColumnType columnType = SQLiteRaw.GetColumnType(stmt, 0);
-                object? columnValue = ReadColumn(stmt, 0, columnType, typeof(T));
+            Result result = SQLiteRaw.Step(stmt);
+            if (result is Result.Row) {
+                object? columnValue = Connection.Orm.ReadColumn(stmt, 0, typeof(T));
                 if (columnValue is not null) {
                     Value = (T)columnValue;
                 }
             }
-            else if (result is SQLiteRaw.Result.Done) {
+            else if (result is Result.Done) {
             }
             else {
-                throw new SQLiteException(result, SQLiteRaw.GetErrorMessage(_connection.Handle));
+                throw new SQLiteException(result, SQLiteRaw.GetErrorMessage(Connection.Handle));
             }
         }
         finally {
@@ -172,16 +85,14 @@ public partial class SQLiteCommand(SQLiteConnection connection) {
 
         return Value;
     }
-
     public IEnumerable<T> ExecuteQueryScalars<T>() {
         Sqlite3Statement statement = Prepare();
         try {
             if (SQLiteRaw.GetColumnCount(statement) < 1) {
                 throw new InvalidOperationException("QueryScalars should return at least one column");
             }
-            while (SQLiteRaw.Step(statement) == SQLiteRaw.Result.Row) {
-                SQLiteRaw.ColumnType colType = SQLiteRaw.GetColumnType(statement, 0);
-                object? value = ReadColumn(statement, 0, colType, typeof(T));
+            while (SQLiteRaw.Step(statement) is Result.Row) {
+                object? value = Connection.Orm.ReadColumn(statement, 0, typeof(T));
                 if (value is null) {
                     yield return default!;
                 }
@@ -195,47 +106,26 @@ public partial class SQLiteCommand(SQLiteConnection connection) {
         }
     }
 
-    public void Bind(string? name, object? value) {
-        _bindings.Add(new Binding() {
-            Name = name,
-            Value = value
-        });
-    }
-    public void Bind(object? value) {
-        Bind(null, value);
-    }
-
-    public override string ToString() {
-        StringBuilder builder = new();
-        builder.AppendLine(CommandText);
-        int i = 0;
-        foreach (Binding binding in _bindings) {
-            builder.AppendLine($" {i}: {binding.Value}");
-            i++;
-        }
-        return builder.ToString();
+    public void AddParameter(string? name, object? value) {
+        Parameters.Add(new Parameter(name, value));
     }
 
     private Sqlite3Statement Prepare() {
-        Sqlite3Statement stmt = SQLiteRaw.Prepare2(_connection.Handle, CommandText);
-        BindAll(stmt);
-        return stmt;
+        Sqlite3Statement statement = SQLiteRaw.Prepare(Connection.Handle, CommandText);
+        BindParameters(statement);
+        return statement;
     }
-
-    private void BindAll(Sqlite3Statement stmt) {
+    private void BindParameters(Sqlite3Statement statement) {
         int nextIndex = 1;
-        foreach (Binding binding in _bindings) {
-            if (binding.Name is not null) {
-                binding.Index = SQLiteRaw.BindParameterIndex(stmt, binding.Name);
-            }
-            else {
-                binding.Index = nextIndex++;
-            }
-            BindParameter(stmt, binding.Index, binding.Value);
+        foreach ((string? name, object? value) in Parameters) {
+            int index = name is not null
+                ? SQLiteRaw.BindParameterIndex(statement, name)
+                : nextIndex++;
+            Connection.Orm.BindParameter(statement, index, value);
         }
     }
 
-    internal static void BindParameter(Sqlite3Statement stmt, int index, object? value) {
+    /*internal static void BindParameter(Sqlite3Statement stmt, int index, object? value) {
         if (value is null) {
             SQLiteRaw.BindNull(stmt, index);
         }
@@ -289,16 +179,10 @@ public partial class SQLiteCommand(SQLiteConnection connection) {
                 }
             }
         }
-    }
+    }*/
 
-    private class Binding {
-        public string? Name { get; set; }
-        public object? Value { get; set; }
-        public int Index { get; set; }
-    }
-
-    private static object? ReadColumn(Sqlite3Statement stmt, int index, SQLiteRaw.ColumnType type, Type clrType) {
-        if (type is SQLiteRaw.ColumnType.Null) {
+    /*private static object? ReadColumn(Sqlite3Statement stmt, int index, ColumnType type, Type clrType) {
+        if (type is ColumnType.Null) {
             return null;
         }
         else {
@@ -331,7 +215,7 @@ public partial class SQLiteCommand(SQLiteConnection connection) {
                 return BytesToDateTimeOffset(SQLiteRaw.GetColumnBlob(stmt, index));
             }
             else if (clrType.IsEnum) {
-                if (type is SQLiteRaw.ColumnType.Text) {
+                if (type is ColumnType.Text) {
                     string value = SQLiteRaw.GetColumnText(stmt, index);
                     return Enum.Parse(clrType, value, true);
                 }
@@ -386,7 +270,7 @@ public partial class SQLiteCommand(SQLiteConnection connection) {
                 throw new NotSupportedException("Don't know how to read " + clrType);
             }
         }
-    }
+    }*/
 
     internal static DateTimeOffset BytesToDateTimeOffset(byte[] bytes) {
         long dateTicks = BitConverter.ToInt64(bytes, 0);
@@ -398,5 +282,14 @@ public partial class SQLiteCommand(SQLiteConnection connection) {
             .. BitConverter.GetBytes(dateTimeOffset.DateTime.Ticks),
             .. BitConverter.GetBytes(dateTimeOffset.Offset.Ticks)
         ];
+    }
+
+    private record struct Parameter(string? Name, object? Value) {
+        public string? Name { get; set; } = Name;
+        public object? Value { get; set; } = Value;
+
+        public readonly override string ToString() {
+            return Name is not null ? $"{Name} = {Value}" : $"{Value}";
+        }
     }
 }

@@ -12,7 +12,7 @@ namespace SQLiteSharp;
 public static class Globals {
     /// <summary>
     /// Convert an input string to a quoted SQL string that can be safely used in queries.<br/>
-    /// For example, <c>red "blue" green</c> becomes <c>"red ""blue"" green"</c>.
+    /// For example, (<c>red "blue" green</c>) becomes (<c>"red ""blue"" green"</c>).
     /// </summary>
     public static string Quote(string? unsafeString) {
         if (unsafeString is null) {

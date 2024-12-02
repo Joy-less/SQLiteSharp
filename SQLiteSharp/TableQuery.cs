@@ -5,32 +5,25 @@ using System.Text;
 
 namespace SQLiteSharp;
 
-public abstract class TableQuery {
-}
+public class TableQuery<T>(SQLiteConnection connection, TableMap table) : IEnumerable<T>, IEnumerable {
+    public SQLiteConnection Connection { get; } = connection;
+    public TableMap Table { get; } = table;
 
-public class TableQuery<T> : TableQuery, IEnumerable<T> {
-    public SQLiteConnection Connection { get; }
-    public TableMapping Table { get; }
+    private Expression? WhereExpression;
+    private List<(string ColumnName, bool Ascending)>? OrderBys;
+    private int? Limit;
+    private int? Offset;
 
-    private Expression? _where;
-    private List<(string ColumnName, bool Ascending)>? _orderBys;
-    private int? _limit;
-    private int? _offset;
-
-    private TableQuery(SQLiteConnection connection, TableMapping table) {
-        Connection = connection;
-        Table = table;
-    }
     public TableQuery(SQLiteConnection connection)
-        : this(connection, connection.GetMapping<T>()) {
+        : this(connection, connection.MapTable<T>()) {
     }
 
     public TableQuery<U> Clone<U>() {
         TableQuery<U> query = new(Connection, Table) {
-            _where = _where,
-            _orderBys = _orderBys?.ToList(),
-            _limit = _limit,
-            _offset = _offset,
+            WhereExpression = WhereExpression,
+            OrderBys = OrderBys?.ToList(),
+            Limit = Limit,
+            Offset = Offset,
         };
         return query;
     }
@@ -40,7 +33,7 @@ public class TableQuery<T> : TableQuery, IEnumerable<T> {
     /// </summary>
     public TableQuery<T> Where(Expression<Func<T, bool>> predicate) {
         TableQuery<T> query = Clone<T>();
-        query._where = AndAlso(_where, predicate.Body);
+        query.WhereExpression = AndAlso(WhereExpression, predicate.Body);
         return query;
     }
 
@@ -48,11 +41,11 @@ public class TableQuery<T> : TableQuery, IEnumerable<T> {
     /// Delete all the rows that match this query (and the given predicate).
     /// </summary>
     public int Delete(Expression<Func<T, bool>>? predicate = null) {
-        if (_limit is not null || _offset is not null) {
+        if (Limit is not null || Offset is not null) {
             throw new InvalidOperationException("Cannot delete with limits or offsets");
         }
 
-        Expression? deletePredicate = AndAlso(_where, predicate)
+        Expression? deletePredicate = AndAlso(WhereExpression, predicate)
             ?? throw new InvalidOperationException($"No delete condition (use SQLiteConnection.DeleteAll to delete every item from the table)");
         
         List<object?> parameters = [];
@@ -68,7 +61,7 @@ public class TableQuery<T> : TableQuery, IEnumerable<T> {
     /// </summary>
     public TableQuery<T> Take(int n) {
         TableQuery<T> query = Clone<T>();
-        query._limit = n;
+        query.Limit = n;
         return query;
     }
     /// <summary>
@@ -76,7 +69,7 @@ public class TableQuery<T> : TableQuery, IEnumerable<T> {
     /// </summary>
     public TableQuery<T> Skip(int n) {
         TableQuery<T> query = Clone<T>();
-        query._offset = n;
+        query.Offset = n;
         return query;
     }
 
@@ -113,8 +106,8 @@ public class TableQuery<T> : TableQuery, IEnumerable<T> {
 
         if (memberExpression?.Expression?.NodeType is ExpressionType.Parameter) {
             TableQuery<T> query = Clone<T>();
-            query._orderBys ??= [];
-            query._orderBys.Add((Table.FindColumnByMemberName(memberExpression.Member.Name)!.Name, ascending));
+            query.OrderBys ??= [];
+            query.OrderBys.Add((Table.FindColumnByMemberName(memberExpression.Member.Name)!.Name, ascending));
             return query;
         }
         else {
@@ -125,28 +118,28 @@ public class TableQuery<T> : TableQuery, IEnumerable<T> {
     private SQLiteCommand GenerateCommand(string selectionList) {
         string commandText = $"select {selectionList} from {Quote(Table.TableName)}";
         List<object?> parameters = [];
-        if (_where is not null) {
-            commandText += $" where {CompileExpression(_where, parameters).CommandText}";
+        if (WhereExpression is not null) {
+            commandText += $" where {CompileExpression(WhereExpression, parameters).CommandText}";
         }
-        if (_orderBys?.Count > 0) {
-            string orderByString = string.Join(", ", _orderBys.Select(orderBy => Quote(orderBy.ColumnName) + (orderBy.Ascending ? "" : " desc")));
+        if (OrderBys?.Count > 0) {
+            string orderByString = string.Join(", ", OrderBys.Select(orderBy => Quote(orderBy.ColumnName) + (orderBy.Ascending ? "" : " desc")));
             commandText += $" order by {orderByString}";
         }
-        if (_limit is not null) {
-            commandText += $" limit {_limit.Value}";
+        if (Limit is not null) {
+            commandText += $" limit {Limit.Value}";
         }
-        if (_offset.HasValue) {
-            if (_limit is null) {
+        if (Offset is not null) {
+            if (Limit is null) {
                 commandText += " limit -1 ";
             }
-            commandText += $" offset {_offset.Value}";
+            commandText += $" offset {Offset.Value}";
         }
         return Connection.CreateCommand(commandText, parameters);
     }
 
-    private class CompileResult {
-        public string? CommandText { get; set; }
-        public object? Value { get; set; }
+    private record struct CompileResult {
+        public string? CommandText;
+        public object? Value;
     }
 
     private CompileResult CompileExpression(Expression expression, List<object?> queryParameters) {
@@ -211,10 +204,10 @@ public class TableQuery<T> : TableQuery, IEnumerable<T> {
             }
             else if (call.Method.Name is "Contains" && callArguments.Length == 1) {
                 if (call.Object != null && call.Object.Type == typeof(string)) {
-                    sqlCall = "( instr(" + callTarget!.CommandText + "," + callArguments[0].CommandText + ") >0 )";
+                    sqlCall = "( instr(" + callTarget!.Value.CommandText + "," + callArguments[0].CommandText + ") >0 )";
                 }
                 else {
-                    sqlCall = "(" + callArguments[0].CommandText + " in " + callTarget!.CommandText + ")";
+                    sqlCall = "(" + callArguments[0].CommandText + " in " + callTarget!.Value.CommandText + ")";
                 }
             }
             else if (call.Method.Name is "StartsWith" && callArguments.Length >= 1) {
@@ -224,10 +217,10 @@ public class TableQuery<T> : TableQuery, IEnumerable<T> {
                 }
                 switch (comparisonType) {
                     case StringComparison.Ordinal or StringComparison.CurrentCulture:
-                        sqlCall = "( substr(" + callTarget!.CommandText + ", 1, " + callArguments[0].Value!.ToString()!.Length + ") =  " + callArguments[0].CommandText + ")";
+                        sqlCall = "( substr(" + callTarget!.Value.CommandText + ", 1, " + callArguments[0].Value!.ToString()!.Length + ") =  " + callArguments[0].CommandText + ")";
                         break;
                     case StringComparison.OrdinalIgnoreCase or StringComparison.CurrentCultureIgnoreCase:
-                        sqlCall = "(" + callTarget!.CommandText + " like (" + callArguments[0].CommandText + " || '%'))";
+                        sqlCall = "(" + callTarget!.Value.CommandText + " like (" + callArguments[0].CommandText + " || '%'))";
                         break;
                 }
             }
@@ -238,24 +231,24 @@ public class TableQuery<T> : TableQuery, IEnumerable<T> {
                 }
                 switch (comparisonType) {
                     case StringComparison.Ordinal or StringComparison.CurrentCulture:
-                        sqlCall = "( substr(" + callTarget!.CommandText + ", length(" + callTarget.CommandText + ") - " + callArguments[0].Value!.ToString()!.Length + "+1, " + callArguments[0].Value!.ToString()!.Length + ") =  " + callArguments[0].CommandText + ")";
+                        sqlCall = "( substr(" + callTarget!.Value.CommandText + ", length(" + callTarget.Value.CommandText + ") - " + callArguments[0].Value!.ToString()!.Length + "+1, " + callArguments[0].Value!.ToString()!.Length + ") =  " + callArguments[0].CommandText + ")";
                         break;
                     case StringComparison.OrdinalIgnoreCase or StringComparison.CurrentCultureIgnoreCase:
-                        sqlCall = "(" + callTarget!.CommandText + " like ('%' || " + callArguments[0].CommandText + "))";
+                        sqlCall = "(" + callTarget!.Value.CommandText + " like ('%' || " + callArguments[0].CommandText + "))";
                         break;
                 }
             }
             else if (call.Method.Name is "Equals" && callArguments.Length == 1) {
-                sqlCall = "(" + callTarget!.CommandText + " = (" + callArguments[0].CommandText + "))";
+                sqlCall = "(" + callTarget!.Value.CommandText + " = (" + callArguments[0].CommandText + "))";
             }
             else if (call.Method.Name is "ToLower") {
-                sqlCall = "(lower(" + callTarget!.CommandText + "))";
+                sqlCall = "(lower(" + callTarget!.Value.CommandText + "))";
             }
             else if (call.Method.Name is "ToUpper") {
-                sqlCall = "(upper(" + callTarget!.CommandText + "))";
+                sqlCall = "(upper(" + callTarget!.Value.CommandText + "))";
             }
             else if (call.Method.Name is "Replace" && callArguments.Length == 2) {
-                sqlCall = "(replace(" + callTarget!.CommandText + "," + callArguments[0].CommandText + "," + callArguments[1].CommandText + "))";
+                sqlCall = "(replace(" + callTarget!.Value.CommandText + "," + callArguments[0].CommandText + "," + callArguments[1].CommandText + "))";
             }
             else if (call.Method.Name is "IsNullOrEmpty" && callArguments.Length == 1) {
                 sqlCall = "(" + callArguments[0].CommandText + " is null or" + callArguments[0].CommandText + " ='' )";

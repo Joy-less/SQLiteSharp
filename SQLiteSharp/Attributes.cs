@@ -69,10 +69,3 @@ public class CollationAttribute(string collation) : Attribute {
 [AttributeUsage(AttributeTargets.Property | AttributeTargets.Field)]
 public class NotNullAttribute : Attribute {
 }
-
-/// <summary>
-/// Store the enum by its string name rather than its integer value.
-/// </summary>
-[AttributeUsage(AttributeTargets.Enum | AttributeTargets.Field)]
-public class StoreByNameAttribute : Attribute {
-}
