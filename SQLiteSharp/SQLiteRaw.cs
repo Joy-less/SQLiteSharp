@@ -1,5 +1,4 @@
 ﻿using SQLitePCL;
-using System;
 
 namespace SQLiteSharp;
 
@@ -289,12 +288,4 @@ public readonly struct SqliteValue {
     public static implicit operator SqliteValue(double? value) => new(value);
     public static implicit operator SqliteValue(string? value) => new(value);
     public static implicit operator SqliteValue(byte[]? value) => new(value);
-
-    /*public static explicit operator long(SqliteValue value) => (long)value.AsObject!;
-    public static explicit operator double(SqliteValue value) => (double)value.AsObject!;
-    public static explicit operator string(SqliteValue value) => (string)value.AsObject!;
-    public static explicit operator byte[](SqliteValue value) => (byte[])value.AsObject!;*/
-
-    /*public static explicit operator long?(SqliteValue value) => (long?)value.AsObject;
-    public static explicit operator double?(SqliteValue value) => (double?)value.AsObject;*/
 }

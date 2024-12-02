@@ -11,7 +11,6 @@ public class ColumnMap {
     public bool AutoIncrement { get; }
     public bool PrimaryKey { get; }
     public bool NotNull { get; }
-    public int? MaxStringLength { get; }
     public IndexedAttribute[] Indexes { get; }
 
     public ColumnMap(MemberInfo member, Orm? orm = null) {
@@ -34,7 +33,6 @@ public class ColumnMap {
         }
 
         NotNull = PrimaryKey || Orm.IsNotNullConstrained(member);
-        MaxStringLength = Orm.GetMaxStringLength(member);
     }
 
     public void SetValue(object obj, object? value) {
