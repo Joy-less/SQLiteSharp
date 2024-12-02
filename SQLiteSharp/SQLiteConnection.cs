@@ -939,10 +939,6 @@ public partial class SQLiteConnection : IDisposable {
     public Task RunInTransactionAsync(Action action) {
         return Task.Run(() => RunInTransaction(action));
     }
-    /// <inheritdoc cref="Table{T}"/>
-    public AsyncTableQuery<T> TableAsync<T>() where T : new() {
-        return new AsyncTableQuery<T>(Table<T>());
-    }
     /// <inheritdoc cref="ExecuteScalar{T}(string, IEnumerable{object?})"/>
     public Task<T> ExecuteScalarAsync<T>(string query, params IEnumerable<object?> parameters) {
         return Task.Run(() => ExecuteScalar<T>(query, parameters));

@@ -1,11 +1,11 @@
 ﻿using System.Collections;
-using System.Linq.Expressions;
-using System.Reflection;
 using System.Text;
+using System.Reflection;
+using System.Linq.Expressions;
 
 namespace SQLiteSharp;
 
-public class TableQuery<T>(SQLiteConnection connection, TableMap table) : IEnumerable<T>, IEnumerable {
+public class TableQuery<T>(SQLiteConnection connection, TableMap table) : IEnumerable<T>, IEnumerable, IAsyncEnumerable<T> {
     public SQLiteConnection Connection { get; } = connection;
     public TableMap Table { get; } = table;
 
@@ -423,6 +423,10 @@ public class TableQuery<T>(SQLiteConnection connection, TableMap table) : IEnume
     IEnumerator IEnumerable.GetEnumerator() {
         return GetEnumerator();
     }
+    /// <inheritdoc cref="GetEnumerator()"/>
+    public IAsyncEnumerator<T> GetAsyncEnumerator(CancellationToken cancelToken = default) {
+        return this.ToAsyncEnumerable().GetAsyncEnumerator(cancelToken);
+    }
 
     /// <summary>
     /// Returns a list of all the elements matching the query.
@@ -459,5 +463,46 @@ public class TableQuery<T>(SQLiteConnection connection, TableMap table) : IEnume
     /// </summary>
     public T? FirstOrDefault(Expression<Func<T, bool>> predicate) {
         return Where(predicate).FirstOrDefault();
+    }
+
+    /// <inheritdoc cref="ToList()"/>
+    public Task<List<T>> ToListAsync() {
+        return Task.Run(ToList);
+    }
+    /// <inheritdoc cref="ToArray()"/>
+    public Task<T[]> ToArrayAsync() {
+        return Task.Run(ToArray);
+    }
+    /// <inheritdoc cref="Count()"/>
+    public Task<int> CountAsync() {
+        return Task.Run(Count);
+    }
+    /// <inheritdoc cref="Count(Expression{Func{T, bool}})"/>
+    public Task<int> CountAsync(Expression<Func<T, bool>> predicate) {
+        return Task.Run(() => Count(predicate));
+    }
+    /// <inheritdoc cref="ElementAt(int)"/>
+    public Task<T> ElementAtAsync(int index) {
+        return Task.Run(() => ElementAt(index));
+    }
+    /// <inheritdoc cref="First()"/>
+    public Task<T> FirstAsync() {
+        return Task.Run(First);
+    }
+    /// <inheritdoc cref="FirstOrDefault()"/>
+    public Task<T?> FirstOrDefaultAsync() {
+        return Task.Run(FirstOrDefault);
+    }
+    /// <inheritdoc cref="First(Expression{Func{T, bool}})"/>
+    public Task<T> FirstAsync(Expression<Func<T, bool>> predicate) {
+        return Task.Run(() => First(predicate));
+    }
+    /// <inheritdoc cref="FirstOrDefault(Expression{Func{T, bool}})"/>
+    public Task<T?> FirstOrDefaultAsync(Expression<Func<T, bool>> predicate) {
+        return Task.Run(() => FirstOrDefault(predicate));
+    }
+    /// <inheritdoc cref="Delete(Expression{Func{T, bool}}?)"/>
+    public Task<int> DeleteAsync(Expression<Func<T, bool>> predicate) {
+        return Task.Run(() => Delete(predicate));
     }
 }
