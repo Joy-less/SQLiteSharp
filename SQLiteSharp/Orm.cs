@@ -7,7 +7,6 @@ namespace SQLiteSharp;
 public class Orm {
     public ConcurrentDictionary<Type, TableMap> TableMaps { get; } = [];
     public ConcurrentDictionary<Type, TypeSerializer> TypeSerializers { get; } = [];
-    public TypeSerializer? TypeSerializerFallback { get; set; } = null;
     public Func<MemberInfo, bool> IsImplicitPrimaryKey { get; set; } = Member => Member.Name == "Id";
     public Func<MemberInfo, bool> IsImplicitIndex { get; set; } = Member => Member.Name.EndsWith("Id");
     public Func<MemberInfo, bool> IsImplicitAutoIncrementedPrimaryKey { get; set; } = Member => false;
@@ -36,9 +35,11 @@ public class Orm {
         if (TypeSerializers.TryGetValue(type, out TypeSerializer mapper)) {
             return mapper;
         }
-        // Try get fallback serializer
-        if (TypeSerializerFallback is not null) {
-            return TypeSerializerFallback.Value;
+        // Try get fallback serializer for base type
+        foreach (TypeSerializer typeSerializer in TypeSerializers.Values) {
+            if (typeSerializer.ClrType == type) {
+                return typeSerializer;
+            }
         }
         // Serializer not found
         throw new InvalidOperationException($"No {nameof(TypeSerializer)} found for '{type}'");
@@ -202,9 +203,9 @@ public class Orm {
             serialize: (byte[] clr) => clr,
             deserialize: (SqliteValue sqlite) => sqlite.AsBlob
         );
-        RegisterType<List<byte>>(
+        RegisterType<IEnumerable<byte>>(
             sqliteType: SqliteType.Blob,
-            serialize: (List<byte> clr) => clr.ToArray(),
+            serialize: (IEnumerable<byte> clr) => clr.ToArray(),
             deserialize: (SqliteValue sqlite) => sqlite.AsBlob.ToList()
         );
         RegisterType<Enum>(
