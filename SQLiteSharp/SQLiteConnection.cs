@@ -120,9 +120,9 @@ public partial class SQLiteConnection : IDisposable {
     /// For example, passing "fts5" creates a virtual table using <see href="https://www.sql-easy.com/learn/sqlite-full-text-search">Full Text Search v5</see>.
     /// </summary>
     /// <returns>
-    /// Whether the table was created or migrated.
+    /// <see langword="true"/> if the table was created, <see langword="false"/> if it was migrated.
     /// </returns>
-    public CreateTableResult CreateTable(Type type, string? virtualModuleName = null) {
+    public bool CreateTable(Type type, string? virtualModuleName = null) {
         TableMap map = MapTable(type);
 
         // Ensure table has at least one column
@@ -131,11 +131,12 @@ public partial class SQLiteConnection : IDisposable {
         }
 
         // Check if the table already exists
-        CreateTableResult result = CreateTableResult.Created;
+        bool created;
         List<ColumnInfo> existingColumns = GetColumnInfos(map.TableName).ToList();
 
         // Create new table
         if (existingColumns.Count == 0) {
+            created = true;
             // Add virtual table modifiers
             string virtualModifier = virtualModuleName is not null ? "virtual" : "";
             string usingModifier = virtualModuleName is not null ? $"using {Quote(virtualModuleName)}" : "";
@@ -153,7 +154,7 @@ public partial class SQLiteConnection : IDisposable {
         }
         // Migrate existing table
         else {
-            result = CreateTableResult.Migrated;
+            created = false;
             MigrateTable(map);
         }
 
@@ -184,10 +185,10 @@ public partial class SQLiteConnection : IDisposable {
             CreateIndex(index.IndexName, index.TableName, index.Columns, index.Unique);
         }
 
-        return result;
+        return created;
     }
     /// <inheritdoc cref="CreateTable(Type, string?)"/>
-    public CreateTableResult CreateTable<T>(string? virtualModuleName = null) {
+    public bool CreateTable<T>(string? virtualModuleName = null) {
         return CreateTable(typeof(T), virtualModuleName);
     }
     /// <summary>
@@ -195,10 +196,10 @@ public partial class SQLiteConnection : IDisposable {
     /// Indexes are also created for columns with <see cref="IndexedAttribute"/>.
     /// </summary>
     /// <returns>
-    /// Whether the tables were created or migrated.
+    /// <see langword="true"/> if the tables were created, <see langword="false"/> if they were migrated.
     /// </returns>
-    public Dictionary<Type, CreateTableResult> CreateTables(IEnumerable<Type> types) {
-        Dictionary<Type, CreateTableResult> results = [];
+    public Dictionary<Type, bool> CreateTables(IEnumerable<Type> types) {
+        Dictionary<Type, bool> results = [];
         foreach (Type type in types) {
             results[type] = CreateTable(type);
         }
@@ -808,15 +809,15 @@ public partial class SQLiteConnection : IDisposable {
         return Task.Run(() => MapTable<T>());
     }
     /// <inheritdoc cref="CreateTable(Type, string?)"/>
-    public Task<CreateTableResult> CreateTableAsync(Type type, string? virtualModuleName = null) {
+    public Task<bool> CreateTableAsync(Type type, string? virtualModuleName = null) {
         return Task.Run(() => CreateTable(type, virtualModuleName));
     }
     /// <inheritdoc cref="CreateTable{T}(string?)"/>
-    public Task<CreateTableResult> CreateTableAsync<T>(string? virtualModuleName = null) where T : new() {
+    public Task<bool> CreateTableAsync<T>(string? virtualModuleName = null) where T : new() {
         return Task.Run(() => CreateTable<T>(virtualModuleName));
     }
     /// <inheritdoc cref="CreateTables(IEnumerable{Type})"/>
-    public Task<Dictionary<Type, CreateTableResult>> CreateTablesAsync(IEnumerable<Type> types) {
+    public Task<Dictionary<Type, bool>> CreateTablesAsync(IEnumerable<Type> types) {
         return Task.Run(() => CreateTables(types));
     }
     /// <inheritdoc cref="DropTable{T}()"/>

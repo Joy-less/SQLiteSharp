@@ -1,10 +1,5 @@
 ﻿namespace SQLiteSharp;
 
-public enum CreateTableResult {
-    Created,
-    Migrated,
-}
-
 public static class CollationType {
     /// <summary>
     /// Compares the strings for an exact match (case-sensitive).
