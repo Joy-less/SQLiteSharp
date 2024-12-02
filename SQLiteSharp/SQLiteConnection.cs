@@ -127,7 +127,7 @@ public partial class SQLiteConnection : IDisposable {
 
         // Ensure table has at least one column
         if (map.Columns.Length == 0) {
-            throw new Exception($"Cannot create a table without columns (add properties to '{type.Name}')");
+            throw new Exception($"Cannot create a table without columns (add properties to '{type}')");
         }
 
         // Check if the table already exists

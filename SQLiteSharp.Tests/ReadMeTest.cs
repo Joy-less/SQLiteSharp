@@ -33,6 +33,30 @@ public class ReadMeTest {
         List<ShopItem> Bananas = Connection.Table<ShopItem>().Where(ShopItem => ShopItem.ItemName == "Banana").ToList();
         Assert.Single(Bananas);
     }
+    [Fact]
+    public void Test2() {
+        // Open a database connection
+        using SQLiteConnection Connection = new(":memory:");
+
+        // Register custom type
+        Connection.Orm.RegisterType<Sweet>(
+            SqliteType.Text,
+            serialize: (Sweet sweet) => System.Text.Json.JsonSerializer.Serialize(sweet),
+            deserialize: (SqliteValue value, Type clrType) => System.Text.Json.JsonSerializer.Deserialize(value.AsText, clrType)
+        );
+
+        // Create a table for a class
+        Connection.CreateTable<SweetWrapper>();
+
+        // Insert items into the table
+        Connection.Insert(new SweetWrapper() {
+            Sweet = new Sweet("orange"),
+        });
+
+        // Find one item in the table matching a predicate
+        SweetWrapper? Sweet = Connection.Table<SweetWrapper>().FirstOrDefault();
+        Assert.NotNull(Sweet);
+    }
 }
 
 public class ShopItem {
@@ -46,4 +70,12 @@ public class ShopItem {
 
     [Ignore]
     public int SomethingToIgnore { get; set; }
+}
+
+public class SweetWrapper {
+    public Sweet? Sweet { get; set; }
+}
+
+public class Sweet(string Flavour) {
+    public string? Flavour { get; set; } = Flavour;
 }

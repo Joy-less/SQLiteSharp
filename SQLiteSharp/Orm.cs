@@ -19,7 +19,7 @@ public class Orm {
     public void RegisterType(Type type, SqliteType sqliteType, Func<object, SqliteValue> serialize, Func<SqliteValue, Type, object?> deserialize) {
         TypeSerializers[type] = new TypeSerializer(type, sqliteType, serialize, deserialize);
     }
-    public void RegisterType<T>(SqliteType sqliteType, Func<T, SqliteValue> serialize, Func<SqliteValue, Type, object> deserialize) {
+    public void RegisterType<T>(SqliteType sqliteType, Func<T, SqliteValue> serialize, Func<SqliteValue, Type, object?> deserialize) {
         RegisterType(typeof(T), sqliteType, (object clr) => serialize((T)clr), (SqliteValue sqlite, Type clrType) => deserialize(sqlite, clrType));
     }
     public bool UnregisterType(Type type) {
