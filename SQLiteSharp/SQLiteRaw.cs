@@ -31,7 +31,7 @@ public static class SQLiteRaw {
     public static Result Finalize(Sqlite3Statement statement) {
         return (Result)Sqlite3.sqlite3_finalize(statement);
     }
-    public static long GetLastInsertRowid(Sqlite3DatabaseHandle db) {
+    public static long GetLastInsertRowId(Sqlite3DatabaseHandle db) {
         return Sqlite3.sqlite3_last_insert_rowid(db);
     }
     public static int BindParameterIndex(Sqlite3Statement statement, string name) {

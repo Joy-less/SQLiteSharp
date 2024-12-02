@@ -47,6 +47,11 @@ public class ColumnMap {
                 throw new InvalidProgramException();
         }
     }
+    public void SetSqliteValue(object obj, SqliteValue sqliteValue) {
+        TypeSerializer typeSerializer = Orm.GetTypeSerializer(ClrType);
+        object? value = typeSerializer.Deserialize(sqliteValue, ClrType);
+        SetValue(obj, value);
+    }
     public object? GetValue(object obj) {
         return ClrMember switch {
             PropertyInfo propertyInfo => propertyInfo.GetValue(obj),
@@ -54,6 +59,7 @@ public class ColumnMap {
             _ => throw new InvalidProgramException(),
         };
     }
+
     private static Type GetMemberType(MemberInfo memberInfo) {
         return memberInfo switch {
             PropertyInfo propertyInfo => propertyInfo.PropertyType,

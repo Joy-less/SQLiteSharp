@@ -584,8 +584,8 @@ public partial class SQLiteConnection : IDisposable {
         int rowCount = Execute(query, values);
 
         if (map.HasAutoIncrementedPrimaryKey) {
-            long id = SQLiteRaw.GetLastInsertRowid(Handle);
-            map.SetAutoIncrementedPrimaryKey(obj, id);
+            long rowId = SQLiteRaw.GetLastInsertRowId(Handle);
+            map.SetPrimaryKeyValue(obj, rowId);
         }
 
         return rowCount;

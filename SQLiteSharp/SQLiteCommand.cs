@@ -43,7 +43,7 @@ public class SQLiteCommand(SQLiteConnection connection) {
                         continue;
                     }
                     // Read value from found column
-                    object? value = Connection.Orm.ReadColumn(statement, i, column.ClrType);
+                    object? value = ReadColumn(statement, i, column.ClrType);
                     column.SetValue(obj, value);
                 }
                 OnInstanceCreated?.Invoke(obj);
@@ -68,7 +68,7 @@ public class SQLiteCommand(SQLiteConnection connection) {
         try {
             Result result = SQLiteRaw.Step(statement);
             if (result is Result.Row) {
-                object? columnValue = Connection.Orm.ReadColumn(statement, 0, typeof(T));
+                object? columnValue = ReadColumn(statement, 0, typeof(T));
                 if (columnValue is not null) {
                     Value = (T)columnValue;
                 }
@@ -92,7 +92,7 @@ public class SQLiteCommand(SQLiteConnection connection) {
                 throw new InvalidOperationException("QueryScalars should return at least one column");
             }
             while (SQLiteRaw.Step(statement) is Result.Row) {
-                object? value = Connection.Orm.ReadColumn(statement, 0, typeof(T));
+                object? value = ReadColumn(statement, 0, typeof(T));
                 if (value is null) {
                     yield return default!;
                 }
@@ -121,8 +121,42 @@ public class SQLiteCommand(SQLiteConnection connection) {
             int index = name is not null
                 ? SQLiteRaw.BindParameterIndex(statement, name)
                 : nextIndex++;
-            Connection.Orm.BindParameter(statement, index, value);
+            BindParameter(statement, index, value);
         }
+    }
+    private void BindParameter(Sqlite3Statement statement, int index, object? value) {
+        if (value is null) {
+            SQLiteRaw.BindNull(statement, index);
+            return;
+        }
+
+        TypeSerializer typeSerializer = Connection.Orm.GetTypeSerializer(value.GetType());
+        SqliteValue rawValue = typeSerializer.Serialize(value);
+
+        switch (rawValue.SqliteType) {
+            case SqliteType.Null:
+                SQLiteRaw.BindNull(statement, index);
+                break;
+            case SqliteType.Integer:
+                SQLiteRaw.BindInt64(statement, index, rawValue.AsInteger);
+                break;
+            case SqliteType.Float:
+                SQLiteRaw.BindDouble(statement, index, rawValue.AsFloat);
+                break;
+            case SqliteType.Text:
+                SQLiteRaw.BindText(statement, index, rawValue.AsText);
+                break;
+            case SqliteType.Blob:
+                SQLiteRaw.BindBlob(statement, index, rawValue.AsBlob);
+                break;
+            default:
+                throw new NotImplementedException($"Cannot bind column type '{rawValue.SqliteType}'");
+        }
+    }
+    private object? ReadColumn(Sqlite3Statement statement, int index, Type type) {
+        TypeSerializer typeSerializer = Connection.Orm.GetTypeSerializer(type);
+        SqliteValue value = SQLiteRaw.GetColumnValue(statement, index);
+        return typeSerializer.Deserialize(value, type);
     }
 
     private record struct Parameter(string? Name, object? Value) {

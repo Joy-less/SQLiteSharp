@@ -44,40 +44,6 @@ public class Orm {
         // Serializer not found
         throw new InvalidOperationException($"No {nameof(TypeSerializer)} found for '{type}'");
     }
-    public object? ReadColumn(Sqlite3Statement statement, int index, Type type) {
-        TypeSerializer typeSerializer = GetTypeSerializer(type);
-        SqliteValue value = SQLiteRaw.GetColumnValue(statement, index);
-        return typeSerializer.Deserialize(value, type);
-    }
-    public void BindParameter(Sqlite3Statement statement, int index, object? value) {
-        if (value is null) {
-            SQLiteRaw.BindNull(statement, index);
-            return;
-        }
-
-        TypeSerializer typeSerializer = GetTypeSerializer(value.GetType());
-        SqliteValue rawValue = typeSerializer.Serialize(value);
-
-        switch (rawValue.SqliteType) {
-            case SqliteType.Null:
-                SQLiteRaw.BindNull(statement, index);
-                break;
-            case SqliteType.Integer:
-                SQLiteRaw.BindInt64(statement, index, rawValue.AsInteger);
-                break;
-            case SqliteType.Float:
-                SQLiteRaw.BindDouble(statement, index, rawValue.AsFloat);
-                break;
-            case SqliteType.Text:
-                SQLiteRaw.BindText(statement, index, rawValue.AsText);
-                break;
-            case SqliteType.Blob:
-                SQLiteRaw.BindBlob(statement, index, rawValue.AsBlob);
-                break;
-            default:
-                throw new NotImplementedException($"Cannot bind column type '{rawValue.SqliteType}'");
-        }
-    }
     public string GetSqlDeclaration(ColumnMap column) {
         TypeSerializer typeSerializer = GetTypeSerializer(column.ClrType);
 
@@ -109,9 +75,6 @@ public class Orm {
     }
     public static IEnumerable<IndexedAttribute> GetIndexes(MemberInfo memberInfo) {
         return memberInfo.GetCustomAttributes<IndexedAttribute>();
-    }
-    public static int? GetMaxStringLength(MemberInfo memberInfo) {
-        return memberInfo.GetCustomAttribute<MaxLengthAttribute>()?.Value;
     }
     public static Type AsUnderlyingType(Type Type) {
         return Nullable.GetUnderlyingType(Type) ?? Type;

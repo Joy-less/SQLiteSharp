@@ -17,8 +17,8 @@ public class TableMap {
 
         TableAttribute? tableAttribute = type.GetCustomAttribute<TableAttribute>();
 
-        TableName = !string.IsNullOrEmpty(tableAttribute?.Name) ? tableAttribute!.Name : Type.Name;
-        WithoutRowId = tableAttribute is not null && tableAttribute.WithoutRowId;
+        TableName = tableAttribute?.Name ?? Type.Name;
+        WithoutRowId = tableAttribute?.WithoutRowId ?? false;
 
         MemberInfo[] members = [.. type.GetProperties(), .. type.GetFields()];
         List<ColumnMap> columns = new(members.Length);
@@ -48,8 +48,8 @@ public class TableMap {
         }
     }
 
-    public void SetAutoIncrementedPrimaryKey(object obj, long id) {
-        PrimaryKey!.SetValue(obj, Convert.ChangeType(id, PrimaryKey.ClrType));
+    public void SetPrimaryKeyValue(object obj, SqliteValue rawValue) {
+        PrimaryKey?.SetSqliteValue(obj, rawValue);
     }
 
     public ColumnMap? FindColumnByMemberName(string memberName) {

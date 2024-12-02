@@ -5,7 +5,7 @@ public class TableAttribute(string name) : Attribute {
     public string Name { get; set; } = name;
 
     /// <summary>
-    /// Flag whether to create the table without <c>rowid</c> (see <see href="https://sqlite.org/withoutrowid.html"/>).<br/>
+    /// Whether to create the table without <c>rowid</c> (see <see href="https://sqlite.org/withoutrowid.html"/>).<br/>
     /// The default is <see langword="false"/> so that SQLite adds an implicit <c>rowid</c> to every table created.
     /// </summary>
     public bool WithoutRowId { get; set; }
@@ -39,10 +39,6 @@ public class IndexedAttribute : Attribute {
 }
 
 [AttributeUsage(AttributeTargets.Property | AttributeTargets.Field)]
-public class IgnoreAttribute : Attribute {
-}
-
-[AttributeUsage(AttributeTargets.Property | AttributeTargets.Field)]
 public class UniqueAttribute : IndexedAttribute {
     public override bool Unique {
         get => true;
@@ -51,8 +47,7 @@ public class UniqueAttribute : IndexedAttribute {
 }
 
 [AttributeUsage(AttributeTargets.Property | AttributeTargets.Field)]
-public class MaxLengthAttribute(int length) : Attribute {
-    public int Value { get; } = length;
+public class IgnoreAttribute : Attribute {
 }
 
 /// <summary>
