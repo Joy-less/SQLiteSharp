@@ -16,11 +16,11 @@ public class Orm {
     public Orm() {
         AddDefaultTypeSerializers();
     }
-    public void RegisterType(Type type, SqliteType sqliteType, Func<object, SqliteValue> serialize, Func<SqliteValue, object?> deserialize) {
+    public void RegisterType(Type type, SqliteType sqliteType, Func<object, SqliteValue> serialize, Func<SqliteValue, Type, object?> deserialize) {
         TypeSerializers[type] = new TypeSerializer(type, sqliteType, serialize, deserialize);
     }
-    public void RegisterType<T>(SqliteType sqliteType, Func<T, SqliteValue> serialize, Func<SqliteValue, object> deserialize) {
-        RegisterType(typeof(T), sqliteType, (object clr) => serialize((T)clr), (SqliteValue sqlite) => deserialize(sqlite));
+    public void RegisterType<T>(SqliteType sqliteType, Func<T, SqliteValue> serialize, Func<SqliteValue, Type, object> deserialize) {
+        RegisterType(typeof(T), sqliteType, (object clr) => serialize((T)clr), (SqliteValue sqlite, Type clrType) => deserialize(sqlite, clrType));
     }
     public bool UnregisterType(Type type) {
         return TypeSerializers.TryRemove(type, out _);
@@ -47,7 +47,7 @@ public class Orm {
     public object? ReadColumn(Sqlite3Statement statement, int index, Type type) {
         TypeSerializer typeSerializer = GetTypeSerializer(type);
         SqliteValue value = SQLiteRaw.GetColumnValue(statement, index);
-        return typeSerializer.Deserialize(value);
+        return typeSerializer.Deserialize(value, type);
     }
     public void BindParameter(Sqlite3Statement statement, int index, object? value) {
         if (value is null) {
@@ -121,107 +121,107 @@ public class Orm {
         RegisterType<bool>(
             sqliteType: SqliteType.Integer,
             serialize: (bool clr) => clr ? 1 : 0,
-            deserialize: (SqliteValue sqlite) => (int)sqlite.AsInteger != 0
+            deserialize: (SqliteValue sqlite, Type clrType) => (int)sqlite.AsInteger != 0
         );
         RegisterType<string>(
             sqliteType: SqliteType.Text,
             serialize: (string clr) => clr,
-            deserialize: (SqliteValue sqlite) => sqlite.AsText
+            deserialize: (SqliteValue sqlite, Type clrType) => sqlite.AsText
         );
         RegisterType<byte>(
             sqliteType: SqliteType.Integer,
             serialize: (byte clr) => clr,
-            deserialize: (SqliteValue sqlite) => (byte)sqlite.AsInteger
+            deserialize: (SqliteValue sqlite, Type clrType) => (byte)sqlite.AsInteger
         );
         RegisterType<sbyte>(
             sqliteType: SqliteType.Integer,
             serialize: (sbyte clr) => clr,
-            deserialize: (SqliteValue sqlite) => (sbyte)sqlite.AsInteger
+            deserialize: (SqliteValue sqlite, Type clrType) => (sbyte)sqlite.AsInteger
         );
         RegisterType<short>(
             sqliteType: SqliteType.Integer,
             serialize: (short clr) => clr,
-            deserialize: (SqliteValue sqlite) => (short)sqlite.AsInteger
+            deserialize: (SqliteValue sqlite, Type clrType) => (short)sqlite.AsInteger
         );
         RegisterType<ushort>(
             sqliteType: SqliteType.Integer,
             serialize: (ushort clr) => clr,
-            deserialize: (SqliteValue sqlite) => (ushort)sqlite.AsInteger
+            deserialize: (SqliteValue sqlite, Type clrType) => (ushort)sqlite.AsInteger
         );
         RegisterType<int>(
             sqliteType: SqliteType.Integer,
             serialize: (int clr) => clr,
-            deserialize: (SqliteValue sqlite) => (int)sqlite.AsInteger
+            deserialize: (SqliteValue sqlite, Type clrType) => (int)sqlite.AsInteger
         );
         RegisterType<uint>(
             sqliteType: SqliteType.Integer,
             serialize: (uint clr) => clr,
-            deserialize: (SqliteValue sqlite) => (uint)sqlite.AsInteger
+            deserialize: (SqliteValue sqlite, Type clrType) => (uint)sqlite.AsInteger
         );
         RegisterType<long>(
             sqliteType: SqliteType.Integer,
             serialize: (long clr) => clr,
-            deserialize: (SqliteValue sqlite) => sqlite.AsInteger
+            deserialize: (SqliteValue sqlite, Type clrType) => sqlite.AsInteger
         );
         RegisterType<ulong>(
             sqliteType: SqliteType.Integer,
             serialize: (ulong clr) => clr,
-            deserialize: (SqliteValue sqlite) => (ulong)sqlite.AsInteger
+            deserialize: (SqliteValue sqlite, Type clrType) => (ulong)sqlite.AsInteger
         );
         RegisterType<char>(
             sqliteType: SqliteType.Integer,
             serialize: (char clr) => clr,
-            deserialize: (SqliteValue sqlite) => sqlite.AsInteger
+            deserialize: (SqliteValue sqlite, Type clrType) => sqlite.AsInteger
         );
         RegisterType<float>(
             sqliteType: SqliteType.Integer,
             serialize: (float clr) => clr,
-            deserialize: (SqliteValue sqlite) => (float)sqlite.AsFloat
+            deserialize: (SqliteValue sqlite, Type clrType) => (float)sqlite.AsFloat
         );
         RegisterType<double>(
             sqliteType: SqliteType.Integer,
             serialize: (double clr) => clr,
-            deserialize: (SqliteValue sqlite) => sqlite.AsFloat
+            deserialize: (SqliteValue sqlite, Type clrType) => sqlite.AsFloat
         );
         RegisterType<TimeSpan>(
             sqliteType: SqliteType.Integer,
             serialize: (TimeSpan clr) => clr.Ticks,
-            deserialize: (SqliteValue sqlite) => new TimeSpan(sqlite.AsInteger)
+            deserialize: (SqliteValue sqlite, Type clrType) => new TimeSpan(sqlite.AsInteger)
         );
         RegisterType<DateTime>(
             sqliteType: SqliteType.Integer,
             serialize: (DateTime clr) => clr.Ticks,
-            deserialize: (SqliteValue sqlite) => new DateTime(sqlite.AsInteger)
+            deserialize: (SqliteValue sqlite, Type clrType) => new DateTime(sqlite.AsInteger)
         );
         RegisterType<Uri>(
             sqliteType: SqliteType.Text,
             serialize: (Uri clr) => clr.AbsoluteUri,
-            deserialize: (SqliteValue sqlite) => new Uri(sqlite.AsText)
+            deserialize: (SqliteValue sqlite, Type clrType) => new Uri(sqlite.AsText)
         );
         RegisterType<byte[]>(
             sqliteType: SqliteType.Blob,
             serialize: (byte[] clr) => clr,
-            deserialize: (SqliteValue sqlite) => sqlite.AsBlob
+            deserialize: (SqliteValue sqlite, Type clrType) => sqlite.AsBlob
         );
         RegisterType<IEnumerable<byte>>(
             sqliteType: SqliteType.Blob,
             serialize: (IEnumerable<byte> clr) => clr.ToArray(),
-            deserialize: (SqliteValue sqlite) => sqlite.AsBlob.ToList()
+            deserialize: (SqliteValue sqlite, Type clrType) => sqlite.AsBlob.ToList()
         );
         RegisterType<Enum>(
             sqliteType: SqliteType.Integer,
             serialize: (Enum clr) => Convert.ToInt64(clr),
-            deserialize: (SqliteValue sqlite) => sqlite.AsInteger
+            deserialize: (SqliteValue sqlite, Type clrType) => Enum.ToObject(clrType, sqlite.AsInteger)
         );
         RegisterType<StringBuilder>(
             sqliteType: SqliteType.Text,
             serialize: (StringBuilder clr) => clr.ToString(),
-            deserialize: (SqliteValue sqlite) => sqlite.AsText
+            deserialize: (SqliteValue sqlite, Type clrType) => sqlite.AsText
         );
         RegisterType<Guid>(
             sqliteType: SqliteType.Text,
             serialize: (Guid clr) => clr.ToString(),
-            deserialize: (SqliteValue sqlite) => sqlite.AsText
+            deserialize: (SqliteValue sqlite, Type clrType) => sqlite.AsText
         );
     }
     private static string GetTypeSql(SqliteType sqliteType) => sqliteType switch {
@@ -234,9 +234,9 @@ public class Orm {
     };
 }
 
-public readonly struct TypeSerializer(Type clrType, SqliteType sqliteType, Func<object, SqliteValue> serialize, Func<SqliteValue, object?> deserialize) {
+public readonly struct TypeSerializer(Type clrType, SqliteType sqliteType, Func<object, SqliteValue> serialize, Func<SqliteValue, Type, object?> deserialize) {
     public Type ClrType { get; } = clrType;
     public SqliteType SqliteType { get; } = sqliteType;
     public Func<object, SqliteValue> Serialize { get; } = serialize;
-    public Func<SqliteValue, object?> Deserialize { get; } = deserialize;
+    public Func<SqliteValue, Type, object?> Deserialize { get; } = deserialize;
 }
