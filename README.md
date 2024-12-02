@@ -17,6 +17,7 @@ The purpose of SQLiteSharp is to provide improvements to the original library, w
 
 ## Example
 
+First, declare your object with optional annotations:
 ```cs
 public class ShopItem {
     [PrimaryKey, AutoIncrement]
@@ -32,6 +33,7 @@ public class ShopItem {
 }
 ```
 
+Second, open a connection to your database:
 ```cs
 // Open a database connection
 using SQLiteConnection Connection = new("database.db");
@@ -63,3 +65,42 @@ Connection.Delete(Apple);
 List<ShopItem> Bananas = Connection.Table<ShopItem>().Where(ShopItem => ShopItem.ItemName == "Banana").ToList();
 Assert.Single(Bananas);
 ```
+
+## Custom Type Serialization
+
+SQLiteSharp supports serialization for a set of common types, but custom types must be registered.
+
+Type serialization is polymorphic, so you can register `object` as a fallback for all missing types.
+
+```cs
+public class SweetWrapper {
+    public Sweet? Sweet { get; set; } // custom type
+}
+public class Sweet(string Flavour) {
+    public string? Flavour { get; set; } = Flavour;
+}
+```
+
+```cs
+// Open a database connection
+using SQLiteConnection Connection = new(":memory:");
+
+// Register custom type
+Connection.Orm.RegisterType<Sweet>(
+    SqliteType.Text,
+    serialize: (Sweet Sweet) => JsonSerializer.Serialize(Sweet),
+    deserialize: (SqliteValue Value, Type ClrType) => JsonSerializer.Deserialize(Value.AsText, ClrType)
+);
+```
+
+## Versioning Guide
+
+SQLiteSharp uses versions like "1.0" and "2.4".
+
+#### For developers:
+- Increment the major version when adding new features or making breaking changes.
+- Increment the minor version when fixing bugs or making small improvements.
+
+#### For users:
+- You usually want the latest major version, although it may require some changes to your project.
+- You always want the latest minor version, and there should not be any issues upgrading.

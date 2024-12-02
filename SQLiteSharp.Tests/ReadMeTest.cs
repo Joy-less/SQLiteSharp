@@ -41,8 +41,8 @@ public class ReadMeTest {
         // Register custom type
         Connection.Orm.RegisterType<Sweet>(
             SqliteType.Text,
-            serialize: (Sweet sweet) => System.Text.Json.JsonSerializer.Serialize(sweet),
-            deserialize: (SqliteValue value, Type clrType) => System.Text.Json.JsonSerializer.Deserialize(value.AsText, clrType)
+            serialize: (Sweet Sweet) => System.Text.Json.JsonSerializer.Serialize(Sweet),
+            deserialize: (SqliteValue Value, Type ClrType) => System.Text.Json.JsonSerializer.Deserialize(Value.AsText, ClrType)
         );
 
         // Create a table for a class
