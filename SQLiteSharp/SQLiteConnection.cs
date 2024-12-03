@@ -33,7 +33,7 @@ public partial class SQLiteConnection : IDisposable {
         Handle = handle;
 
         if (openResult is not Result.OK) {
-            throw new SQLiteException(openResult, $"Could not open database file {Quote(Options.DatabasePath)}: {openResult}");
+            throw new SQLiteException(openResult, $"Could not open database file {Options.DatabasePath.SqlQuote()}: {openResult}");
         }
 
         BusyTimeout = TimeSpan.FromSeconds(1.0);
@@ -139,7 +139,7 @@ public partial class SQLiteConnection : IDisposable {
             created = true;
             // Add virtual table modifiers
             string virtualModifier = virtualModuleName is not null ? "virtual" : "";
-            string usingModifier = virtualModuleName is not null ? $"using {Quote(virtualModuleName)}" : "";
+            string usingModifier = virtualModuleName is not null ? $"using {virtualModuleName.SqlQuote()}" : "";
 
             // Add column declarations
             string columnDeclarations = string.Join(", ", map.Columns.Select(map.Orm.GetSqlDeclaration));
@@ -148,7 +148,7 @@ public partial class SQLiteConnection : IDisposable {
             string withoutRowIdModifier = map.WithoutRowId ? "without rowid" : "";
 
             // Build query
-            string query = $"create {virtualModifier} table if not exists {Quote(map.TableName)} {usingModifier} ({columnDeclarations}) {withoutRowIdModifier}";
+            string query = $"create {virtualModifier} table if not exists {map.TableName.SqlQuote()} {usingModifier} ({columnDeclarations}) {withoutRowIdModifier}";
             // Execute query
             Execute(query);
         }
@@ -217,7 +217,7 @@ public partial class SQLiteConnection : IDisposable {
         ).ToList();
 
         foreach (ColumnMap column in newColumns) {
-            string sql = $"alter table {Quote(map.TableName)} add column {map.Orm.GetSqlDeclaration(column)}";
+            string sql = $"alter table {map.TableName.SqlQuote()} add column {map.Orm.GetSqlDeclaration(column)}";
             Execute(sql);
         }
     }
@@ -236,7 +236,7 @@ public partial class SQLiteConnection : IDisposable {
     /// The TableMapping used to identify the table.
     /// </param>
     public int DropTable(TableMap map) {
-        string query = $"drop table if exists {Quote(map.TableName)}";
+        string query = $"drop table if exists {map.TableName.SqlQuote()}";
         return Execute(query);
     }
 
@@ -244,7 +244,7 @@ public partial class SQLiteConnection : IDisposable {
     /// Gets information about each column in a table.
     /// </summary>
     public IEnumerable<ColumnInfo> GetColumnInfos(string tableName) {
-        string query = $"pragma table_info({Quote(tableName)})";
+        string query = $"pragma table_info({tableName.SqlQuote()})";
         return Query<ColumnInfo>(query);
     }
     public record ColumnInfo {
@@ -259,7 +259,9 @@ public partial class SQLiteConnection : IDisposable {
     /// Creates an index for the specified table and columns, enabling constant lookup times for the columns.
     /// </summary>
     public void CreateIndex(string indexName, string tableName, IEnumerable<string> columnNames, bool unique = false) {
-        string sql = $"create {(unique ? "unique" : "")} index if not exists {Quote(indexName)} on {Quote(tableName)}({string.Join(", ", columnNames.Select(Quote))})";
+        string sql = $"create {(unique ? "unique" : "")} index if not exists {indexName.SqlQuote()} on {tableName.SqlQuote()}({
+            string.Join(", ", columnNames.Select(columnName => columnName.SqlQuote()))
+        })";
         Execute(sql);
     }
     /// <inheritdoc cref="CreateIndex(string, string, IEnumerable{string}, bool)"/>
@@ -274,12 +276,10 @@ public partial class SQLiteConnection : IDisposable {
     /// </code>
     /// </summary>
     public void CreateIndex<T>(Expression<Func<T, object>> property, bool unique = false) {
-        MemberExpression? memberExpression;
-        if (property.Body.NodeType is ExpressionType.Convert) {
-            memberExpression = ((UnaryExpression)property.Body).Operand as MemberExpression;
-        }
-        else {
-            memberExpression = property.Body as MemberExpression;
+        MemberExpression? memberExpression = property.Body as MemberExpression;
+        // Unwrap type cast
+        if (property.Body is UnaryExpression body && body.NodeType is ExpressionType.Convert) {
+            memberExpression = body.Operand as MemberExpression;
         }
 
         PropertyInfo propertyInfo = memberExpression?.Member as PropertyInfo
@@ -477,7 +477,7 @@ public partial class SQLiteConnection : IDisposable {
         try {
             // Create savepoint
             if (savePointName is not null) {
-                Execute($"savepoint {Quote(savePointName)}");
+                Execute($"savepoint {savePointName.SqlQuote()}");
             }
             // Create transaction
             else {
@@ -497,7 +497,7 @@ public partial class SQLiteConnection : IDisposable {
         try {
             // Rollback to savepoint
             if (savePointName is not null) {
-                Execute($"rollback to {Quote(savePointName)}");
+                Execute($"rollback to {savePointName.SqlQuote()}");
             }
             // Rollback to beginning of transaction
             else {
@@ -517,7 +517,7 @@ public partial class SQLiteConnection : IDisposable {
         try {
             // Commit savepoint
             if (savePointName is not null) {
-                Execute($"release {Quote(savePointName)}");
+                Execute($"release {savePointName.SqlQuote()}");
             }
             // Commit transaction
             else {
@@ -573,12 +573,12 @@ public partial class SQLiteConnection : IDisposable {
 
         string query;
         if (columns.Length == 0) {
-            query = $"insert {modifier} into {Quote(map.TableName)} default values";
+            query = $"insert {modifier} into {map.TableName.SqlQuote()} default values";
         }
         else {
-            string columnsSql = string.Join(",", columns.Select(column => Quote(column.Name)));
+            string columnsSql = string.Join(",", columns.Select(column => column.Name.SqlQuote()));
             string valuesSql = string.Join(",", columns.Select(column => "?"));
-            query = $"insert {modifier} into {Quote(map.TableName)}({columnsSql}) values ({valuesSql})";
+            query = $"insert {modifier} into {map.TableName.SqlQuote()}({columnsSql}) values ({valuesSql})";
         }
 
         int rowCount = Execute(query, values);
@@ -687,7 +687,7 @@ public partial class SQLiteConnection : IDisposable {
             parameters = new List<object?>(values);
         }
         parameters.Add(primaryKey.GetValue(obj));
-        string query = $"update {Quote(map.TableName)} set {string.Join(",", columns.Select(column => $"{Quote(column.Name)} = ? "))} where \"{primaryKey.Name}\" = ?";
+        string query = $"update {map.TableName.SqlQuote()} set {string.Join(",", columns.Select(column => $"{column.Name.SqlQuote()} = ? "))} where \"{primaryKey.Name}\" = ?";
 
         int rowCount = Execute(query, parameters);
         return rowCount;
@@ -712,7 +712,7 @@ public partial class SQLiteConnection : IDisposable {
     public int Delete(object primaryKey, TableMap map) {
         ColumnMap primaryKeyColumn = map.PrimaryKey
             ?? throw new NotSupportedException($"Can't delete in table '{map.TableName}' since it has no primary key");
-        string query = $"delete from {Quote(map.TableName)} where {Quote(primaryKeyColumn.Name)} = ?";
+        string query = $"delete from {map.TableName.SqlQuote()} where {primaryKeyColumn.Name.SqlQuote()} = ?";
         int rowCount = Execute(query, primaryKey);
         return rowCount;
     }
@@ -752,7 +752,7 @@ public partial class SQLiteConnection : IDisposable {
     /// The number of objects deleted.
     /// </returns>
     public int DeleteAll(TableMap map) {
-        string query = $"delete from {Quote(map.TableName)}";
+        string query = $"delete from {map.TableName.SqlQuote()}";
         int rowCount = Execute(query);
         return rowCount;
     }

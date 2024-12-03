@@ -44,7 +44,7 @@ public class TableMap {
             if (PrimaryKey is null) {
                 throw new InvalidOperationException("Table mapping has no primary key");
             }
-            return $"select * from {Quote(TableName)} where {Quote(PrimaryKey.Name)} = ?";
+            return $"select * from {TableName.SqlQuote()} where {PrimaryKey.Name.SqlQuote()} = ?";
         }
     }
 

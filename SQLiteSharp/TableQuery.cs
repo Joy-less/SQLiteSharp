@@ -33,7 +33,7 @@ public class TableQuery<T>(SQLiteConnection connection, TableMap table) : IEnume
     /// </summary>
     public TableQuery<T> Where(Expression<Func<T, bool>> predicate) {
         TableQuery<T> query = Clone<T>();
-        query.WhereExpression = AndAlso(WhereExpression, predicate.Body);
+        query.WhereExpression = WhereExpression.AndAlso(predicate.Body);
         return query;
     }
 
@@ -45,11 +45,11 @@ public class TableQuery<T>(SQLiteConnection connection, TableMap table) : IEnume
             throw new InvalidOperationException("Cannot delete with limits or offsets");
         }
 
-        Expression? deletePredicate = AndAlso(WhereExpression, predicate)
+        Expression? deletePredicate = WhereExpression.AndAlso(predicate)
             ?? throw new InvalidOperationException($"No delete condition (use SQLiteConnection.DeleteAll to delete every item from the table)");
         
         List<object?> parameters = [];
-        string commandText = $"delete from {Quote(Table.TableName)} where {CompileExpression(deletePredicate, parameters).CommandText}";
+        string commandText = $"delete from {Table.TableName.SqlQuote()} where {CompileExpression(deletePredicate, parameters).CommandText}";
         SQLiteCommand command = Connection.CreateCommand(commandText, parameters);
 
         int rowCount = command.ExecuteNonQuery();
@@ -94,14 +94,10 @@ public class TableQuery<T>(SQLiteConnection connection, TableMap table) : IEnume
     }
 
     private TableQuery<T> AddOrderBy<U>(Expression<Func<T, U>> orderExpression, bool ascending) {
-        LambdaExpression lambdaExpression = orderExpression;
-
-        MemberExpression? memberExpression;
-        if (lambdaExpression.Body is UnaryExpression unary && unary.NodeType is ExpressionType.Convert) {
-            memberExpression = unary.Operand as MemberExpression;
-        }
-        else {
-            memberExpression = lambdaExpression.Body as MemberExpression;
+        MemberExpression? memberExpression = orderExpression.Body as MemberExpression;
+        // Unwrap type cast
+        if (orderExpression.Body is UnaryExpression body && body.NodeType is ExpressionType.Convert) {
+            memberExpression = body.Operand as MemberExpression;
         }
 
         if (memberExpression?.Expression?.NodeType is ExpressionType.Parameter) {
@@ -111,18 +107,18 @@ public class TableQuery<T>(SQLiteConnection connection, TableMap table) : IEnume
             return query;
         }
         else {
-            throw new NotSupportedException($"Order By does not support: {orderExpression}");
+            throw new NotSupportedException($"Order By does not support: '{orderExpression}'");
         }
     }
 
     private SQLiteCommand GenerateCommand(string selectionList) {
-        string commandText = $"select {selectionList} from {Quote(Table.TableName)}";
+        string commandText = $"select {selectionList} from {Table.TableName.SqlQuote()}";
         List<object?> parameters = [];
         if (WhereExpression is not null) {
             commandText += $" where {CompileExpression(WhereExpression, parameters).CommandText}";
         }
         if (OrderBys?.Count > 0) {
-            string orderByString = string.Join(", ", OrderBys.Select(orderBy => Quote(orderBy.ColumnName) + (orderBy.Ascending ? "" : " desc")));
+            string orderByString = string.Join(", ", OrderBys.Select(orderBy => orderBy.ColumnName.SqlQuote() + (orderBy.Ascending ? "" : " desc")));
             commandText += $" order by {orderByString}";
         }
         if (Limit is not null) {
@@ -308,7 +304,7 @@ public class TableQuery<T>(SQLiteConnection connection, TableMap table) : IEnume
                 // Need to translate it if that column name is mapped
                 string columnName = Table.FindColumnByMemberName(memberExpression.Member.Name)!.Name;
                 return new CompileResult() {
-                    CommandText = Quote(columnName)
+                    CommandText = columnName.SqlQuote()
                 };
             }
             else {

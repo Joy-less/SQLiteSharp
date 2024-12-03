@@ -47,7 +47,7 @@ public class Orm {
     public string GetSqlDeclaration(ColumnMap column) {
         TypeSerializer typeSerializer = GetTypeSerializer(column.ClrType);
 
-        string declaration = $"{Quote(column.Name)} {Quote(GetTypeSql(typeSerializer.SqliteType))} ";
+        string declaration = $"{column.Name.SqlQuote()} {GetTypeSql(typeSerializer.SqliteType).SqlQuote()} ";
 
         if (column.PrimaryKey) {
             declaration += "primary key ";
@@ -59,10 +59,10 @@ public class Orm {
             declaration += "not null ";
         }
         if (column.Collation is not null) {
-            declaration += $"collate {Quote(column.Collation)} ";
+            declaration += $"collate {column.Collation.SqlQuote()} ";
         }
         if (column.Check is not null) {
-            declaration += $"check ({Quote(column.Check)}) ";
+            declaration += $"check ({column.Check.SqlQuote()}) ";
         }
 
         return declaration;
