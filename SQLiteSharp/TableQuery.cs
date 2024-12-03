@@ -3,7 +3,7 @@ using System.Linq.Expressions;
 
 namespace SQLiteSharp;
 
-public class TableQuery<T>(SQLiteConnection connection, TableMap table) : IEnumerable<T>, IEnumerable, IAsyncEnumerable<T> {
+public class TableQuery<T>(SQLiteConnection connection, TableMap table) : IEnumerable<T>, IEnumerable {
     public SQLiteConnection Connection { get; } = connection;
     public TableMap Table { get; } = table;
 
@@ -168,10 +168,6 @@ public class TableQuery<T>(SQLiteConnection connection, TableMap table) : IEnume
     /// <inheritdoc cref="GetEnumerator()"/>
     IEnumerator IEnumerable.GetEnumerator() {
         return GetEnumerator();
-    }
-    /// <inheritdoc cref="GetEnumerator()"/>
-    public IAsyncEnumerator<T> GetAsyncEnumerator(CancellationToken cancelToken = default) {
-        return this.ToAsyncEnumerable().GetAsyncEnumerator(cancelToken);
     }
 
     /// <summary>
