@@ -187,14 +187,14 @@ public class TableQuery<T>(SQLiteConnection connection, TableMap table) : IEnume
         }
         else if (expression.NodeType is ExpressionType.Call) {
             MethodCallExpression call = (MethodCallExpression)expression;
-            CompileResult[] callArguments = new CompileResult[call.Arguments.Count];
             CompileResult callTarget = call.Object is not null ? CompileExpression(call.Object, queryParameters) : default;
 
+            CompileResult[] callArguments = new CompileResult[call.Arguments.Count];
             for (int i = 0; i < callArguments.Length; i++) {
                 callArguments[i] = CompileExpression(call.Arguments[i], queryParameters);
             }
 
-            string sqlCall = "";
+            string? sqlCall = null;
 
             if (call.Method.Name is "Like" && callArguments.Length == 2) {
                 sqlCall = "(" + callArguments[0].CommandText + " like " + callArguments[1].CommandText + ")";
@@ -276,7 +276,6 @@ public class TableQuery<T>(SQLiteConnection connection, TableMap table) : IEnume
             return new CompileResult() {
                 CommandText = sqlCall
             };
-
         }
         else if (expression.NodeType is ExpressionType.Constant) {
             ConstantExpression constantExpression = (ConstantExpression)expression;
@@ -299,7 +298,7 @@ public class TableQuery<T>(SQLiteConnection connection, TableMap table) : IEnume
 
             ParameterExpression? parameterExpression = memberExpression.Expression as ParameterExpression;
             if (parameterExpression is null) {
-                if (memberExpression.Expression is UnaryExpression convert && convert.NodeType == ExpressionType.Convert) {
+                if (memberExpression.Expression is UnaryExpression convert && convert.NodeType is ExpressionType.Convert) {
                     parameterExpression = convert.Operand as ParameterExpression;
                 }
             }
