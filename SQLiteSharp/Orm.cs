@@ -47,7 +47,7 @@ public class Orm {
     public string GetSqlDeclaration(ColumnMap column) {
         TypeSerializer typeSerializer = GetTypeSerializer(column.ClrType);
 
-        string declaration = $"{Quote(column.Name)} {Quote(GetTypeSql(typeSerializer.SqliteType))} collate {Quote(column.Collation)} ";
+        string declaration = $"{Quote(column.Name)} {Quote(GetTypeSql(typeSerializer.SqliteType))} ";
 
         if (column.PrimaryKey) {
             declaration += "primary key ";
@@ -57,6 +57,12 @@ public class Orm {
         }
         if (column.NotNull) {
             declaration += "not null ";
+        }
+        if (column.Collation is not null) {
+            declaration += $"collate {Quote(column.Collation)} ";
+        }
+        if (column.Check is not null) {
+            declaration += $"check ({Quote(column.Check)}) ";
         }
 
         return declaration;
@@ -70,8 +76,11 @@ public class Orm {
     public static bool IsNotNullConstrained(MemberInfo memberInfo) {
         return memberInfo.GetCustomAttribute<NotNullAttribute>() is not null;
     }
-    public static string GetCollation(MemberInfo memberInfo) {
-		return memberInfo.GetCustomAttribute<CollationAttribute>()?.Value ?? CollationType.Binary;
+    public static string? GetCollation(MemberInfo memberInfo) {
+        return memberInfo.GetCustomAttribute<CollationAttribute>()?.Value;
+    }
+    public static string? GetCheck(MemberInfo memberInfo) {
+        return memberInfo.GetCustomAttribute<CheckAttribute>()?.Value;
     }
     public static IEnumerable<IndexedAttribute> GetIndexes(MemberInfo memberInfo) {
         return memberInfo.GetCustomAttributes<IndexedAttribute>();

@@ -59,6 +59,14 @@ public class CollationAttribute(string collation) : Attribute {
 }
 
 /// <summary>
+/// An expression which must be passed for the column to be valid.
+/// </summary>
+[AttributeUsage(AttributeTargets.Property | AttributeTargets.Field)]
+public class CheckAttribute(string check) : Attribute {
+    public string Value { get; } = check;
+}
+
+/// <summary>
 /// The value is not allowed to be null.
 /// </summary>
 [AttributeUsage(AttributeTargets.Property | AttributeTargets.Field)]

@@ -7,7 +7,8 @@ public class ColumnMap {
     public string Name { get; }
     public MemberInfo ClrMember { get; }
     public Type ClrType { get; }
-    public string Collation { get; }
+    public string? Collation { get; }
+    public string? Check { get; }
     public bool AutoIncrement { get; }
     public bool PrimaryKey { get; }
     public bool NotNull { get; }
@@ -22,6 +23,8 @@ public class ColumnMap {
         Name = member.GetCustomAttribute<ColumnAttribute>()?.Name ?? member.Name;
 
         Collation = Orm.GetCollation(member);
+
+        Check = Orm.GetCheck(member);
 
         PrimaryKey = Orm.IsPrimaryKey(member) || Orm.IsImplicitPrimaryKey(member);
 
