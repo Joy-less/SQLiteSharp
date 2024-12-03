@@ -1,13 +1,18 @@
-﻿namespace SQLiteSharp.Tests;
+﻿using DotNetBrightener.LinQToSqlBuilder;
+
+namespace SQLiteSharp.Tests;
 
 public class ReadMeTest {
     [Fact]
     public void Test1() {
+        var builder = SqlBuilder.Select<ShopItem>(Item => Item).Where(Item => Item.ItemName == "Apple");
+        _ = builder;
+
         // Open a database connection
         using SqliteConnection Connection = new("database.db");
 
         // Create a table for a class
-        Connection.CreateTable<ShopItem>();
+        Connection.GetTable<ShopItem>();
 
         // Delete all existing items in the table
         Connection.DeleteAll<ShopItem>();

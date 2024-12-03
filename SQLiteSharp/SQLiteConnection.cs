@@ -100,260 +100,66 @@ public partial class SqliteConnection : IDisposable {
     }
 
     /// <summary>
-    /// Retrieves the <see cref="TableMap"/> for the given type, generating one if not found.
-    /// </summary>
-    /// <returns>
-    /// A mapping containing the table column schema and methods to get/set properties of objects.
-    /// </returns>
-    public TableMap MapTable(Type type) {
-        return Orm.TableMaps.GetOrAdd(type, type => new TableMap(type, Orm));
-    }
-    /// <inheritdoc cref="MapTable(Type)"/>
-    public TableMap MapTable<T>() {
-        return MapTable(typeof(T));
-    }
-
-    /// <summary>
-    /// Creates a table for the given type if it doesn't already exist.<br/>
+    /// Gets or creates a table for the given type.<br/>
     /// Indexes are also created for columns with <see cref="IndexedAttribute"/>.<br/>
-    /// You can create a virtual table using <paramref name="virtualModuleName"/>.
+    /// You can create a virtual table using <paramref name="virtualModule"/>.
     /// For example, passing "fts5" creates a virtual table using <see href="https://www.sql-easy.com/learn/sqlite-full-text-search">Full Text Search v5</see>.
     /// </summary>
-    /// <returns>
-    /// <see langword="true"/> if the table was created, <see langword="false"/> if it was migrated.
-    /// </returns>
-    public bool CreateTable(Type type, string? virtualModuleName = null) {
-        TableMap map = MapTable(type);
-
-        // Ensure table has at least one column
-        if (map.Columns.Length == 0) {
-            throw new Exception($"Cannot create a table without columns (add properties to '{type}')");
-        }
-
-        // Check if the table already exists
-        bool created;
-        List<ColumnInfo> existingColumns = GetColumnInfos(map.TableName).ToList();
-
-        // Create new table
-        if (existingColumns.Count == 0) {
-            created = true;
-            // Add virtual table modifiers
-            string virtualModifier = virtualModuleName is not null ? "virtual" : "";
-            string usingModifier = virtualModuleName is not null ? $"using {virtualModuleName.SqlQuote()}" : "";
-
-            // Add column declarations
-            string columnDeclarations = string.Join(", ", map.Columns.Select(map.Orm.GetSqlDeclaration));
-
-            // Add without row ID modifier
-            string withoutRowIdModifier = map.WithoutRowId ? "without rowid" : "";
-
-            // Build query
-            string query = $"create {virtualModifier} table if not exists {map.TableName.SqlQuote()} {usingModifier} ({columnDeclarations}) {withoutRowIdModifier}";
-            // Execute query
-            Execute(query);
-        }
-        // Migrate existing table
-        else {
-            created = false;
-            MigrateTable(map);
-        }
-
-        // Get indexes to create for columns
-        Dictionary<string, IndexInfo> indexes = [];
-        foreach (ColumnMap column in map.Columns) {
-            foreach (IndexedAttribute index in column.Indexes) {
-                string indexName = index.Name ?? map.TableName + "_" + column.Name;
-                if (!indexes.TryGetValue(indexName, out IndexInfo indexInfo)) {
-                    indexInfo = new IndexInfo() {
-                        IndexName = indexName,
-                        TableName = map.TableName,
-                        Unique = index.Unique,
-                        Columns = [],
-                    };
-                    indexes.Add(indexName, indexInfo);
-                }
-
-                if (index.Unique != indexInfo.Unique) {
-                    throw new Exception("Every column in an index must have the same value for their Unique property.");
-                }
-
-                indexInfo.Columns.Add(column.Name);
-            }
-        }
-        // Create indexes for columns
-        foreach (IndexInfo index in indexes.Values) {
-            CreateIndex(index.IndexName, index.TableName, index.Columns, index.Unique);
-        }
-
-        return created;
-    }
-    /// <inheritdoc cref="CreateTable(Type, string?)"/>
-    public bool CreateTable<T>(string? virtualModuleName = null) {
-        return CreateTable(typeof(T), virtualModuleName);
-    }
-    /// <summary>
-    /// Creates tables for the given types if they don't already exist.<br/>
-    /// Indexes are also created for columns with <see cref="IndexedAttribute"/>.
-    /// </summary>
-    /// <returns>
-    /// <see langword="true"/> if the tables were created, <see langword="false"/> if they were migrated.
-    /// </returns>
-    public Dictionary<Type, bool> CreateTables(IEnumerable<Type> types) {
-        Dictionary<Type, bool> results = [];
-        foreach (Type type in types) {
-            results[type] = CreateTable(type);
-        }
-        return results;
-    }
-    /// <summary>
-    /// Alters a table by adding new columns.<br/>
-    /// This is called by <see cref="CreateTable(Type, Orm?)"/> if the table already exists.
-    /// </summary>
-    public void MigrateTable(TableMap map) {
-        List<ColumnInfo> existingColumns = GetColumnInfos(map.TableName).ToList();
-
-        List<ColumnMap> newColumns = map.Columns.Where(column
-            => !existingColumns.Any(existingColumn => existingColumn.Name.Equals(column.Name, StringComparison.OrdinalIgnoreCase))
-        ).ToList();
-
-        foreach (ColumnMap column in newColumns) {
-            string sql = $"alter table {map.TableName.SqlQuote()} add column {map.Orm.GetSqlDeclaration(column)}";
-            Execute(sql);
-        }
-    }
-
-    /// <summary>
-    /// Executes a "drop table" on the database. This is non-recoverable.
-    /// </summary>
-    public int DropTable<T>() {
-        return DropTable(MapTable<T>());
-    }
-
-    /// <summary>
-    /// Executes a "drop table" on the database. This is non-recoverable.
-    /// </summary>
-    /// <param name="map">
-    /// The TableMapping used to identify the table.
-    /// </param>
-    public int DropTable(TableMap map) {
-        string query = $"drop table if exists {map.TableName.SqlQuote()}";
-        return Execute(query);
+    public SqliteTable<T> GetTable<T>(string? tableName = null, string? virtualModule = null) where T : new() {
+        return new SqliteTable<T>(this, tableName, virtualModule);
     }
 
     /// <summary>
     /// Gets information about each column in a table.
     /// </summary>
-    public IEnumerable<ColumnInfo> GetColumnInfos(string tableName) {
+    public IEnumerable<ColumnInfo> GetTableInfo(string tableName) {
         string query = $"pragma table_info({tableName.SqlQuote()})";
-        return Query<ColumnInfo>(query);
+        return CreateCommand(query).ExecuteQuery<ColumnInfo>(GetTable(tableName));
     }
-    public record ColumnInfo {
-        [Column("cid")] public int ColumnId { get; set; }
-        [Column("name")] public string Name { get; set; } = null!;
-        [Column("type")] public string Type { get; set; } = null!;
-        [Column("notnull")] public bool NotNull { get; set; }
-        [Column("pk")] public int PrimaryKey { get; set; }
-    }
-
-    /// <summary>
-    /// Creates an index for the specified table and columns, enabling constant lookup times for the columns.
-    /// </summary>
-    public void CreateIndex(string indexName, string tableName, IEnumerable<string> columnNames, bool unique = false) {
-        string sql = $"create {(unique ? "unique" : "")} index if not exists {indexName.SqlQuote()} on {tableName.SqlQuote()}({
-            string.Join(", ", columnNames.Select(columnName => columnName.SqlQuote()))
-        })";
-        Execute(sql);
-    }
-    /// <inheritdoc cref="CreateIndex(string, string, IEnumerable{string}, bool)"/>
-    public void CreateIndex(string tableName, IEnumerable<string> columnNames, bool unique = false) {
-        CreateIndex($"{tableName}_{string.Join("_", columnNames)}", tableName, columnNames, unique);
-    }
-    /// <summary>
-    /// Creates an index for the specified table column.<br/>
-    /// For example:
-    /// <code>
-    /// CreateIndex&lt;Player&gt;(player => player.Name);
-    /// </code>
-    /// </summary>
-    public void CreateIndex<T>(Expression<Func<T, object>> property, bool unique = false) {
-        MemberExpression? memberExpression = property.Body as MemberExpression;
-        // Unwrap type cast
-        if (property.Body is UnaryExpression body && body.NodeType is ExpressionType.Convert) {
-            memberExpression = body.Operand as MemberExpression;
-        }
-
-        PropertyInfo propertyInfo = memberExpression?.Member as PropertyInfo
-            ?? throw new ArgumentException("The lambda expression 'property' should point to a valid Property");
-
-        TableMap map = MapTable<T>();
-        string columnName = map.FindColumnByMemberName(propertyInfo.Name)!.Name;
-
-        CreateIndex(map.TableName, [columnName], unique);
+    public bool TableExists(string tableName) {
+        return GetTableInfo(tableName).Any();
     }
 
     /// <summary>
     /// Creates a new SqliteCommand given the command text with parameters.<br/>
-    /// Place <c>?</c> in the command text for each argument.
+    /// Put <c>?</c> in the command text for each argument.
     /// </summary>
     public SqliteCommand CreateCommand(string commandText, params IEnumerable<object?> parameters) {
         SqliteCommand command = new(this) {
             CommandText = commandText,
+            Parameters = parameters.Select(parameter => new SqliteCommandParameter(null, parameter)),
         };
-        foreach (object? parameter in parameters) {
-            command.AddParameter(null, parameter);
-        }
         return command;
     }
     /// <summary>
-    /// Creates a new SqliteCommand given the command text with named parameters. Place <c>@</c> or <c>:</c> or <c>$</c> followed by an alphanumeric identifier for each argument.<br/>
-    /// For example, <c>@name</c>, <c>:name</c> and <c>$name</c> can all be used.
+    /// Creates a new SqliteCommand given the command text with named parameters.<br/>
+    /// Put <c>@</c> (or <c>:</c> / <c>$</c>) in the command text followed by an identifier for each argument.<br/>
+    /// For example, <c>@name</c>, <c>:name</c> or <c>$name</c>.
     /// </summary>
     public SqliteCommand CreateCommand(string commandText, Dictionary<string, object> parameters) {
         SqliteCommand command = new(this) {
             CommandText = commandText,
+            Parameters = parameters.Select(parameter => new SqliteCommandParameter(parameter.Key, parameter.Value)),
         };
-        foreach (KeyValuePair<string, object> parameter in parameters) {
-            command.AddParameter(parameter.Key, parameter.Value);
-        }
         return command;
     }
 
     /// <summary>
-    /// Creates a SqliteCommand given the command text (SQL) with arguments. Place a '?'
-    /// in the command text for each of the arguments and then executes that command.
-    /// Use this method instead of Query when you don't expect rows back. Such cases include
-    /// INSERTs, UPDATEs, and DELETEs.
-    /// You can set the Trace or TimeExecution properties of the connection
-    /// to profile execution.
+    /// Creates and executes a <see cref="SqliteCommand"/> non-query.<br/>
+    /// Use this method when you don't expect rows back.
     /// </summary>
-    /// <param name="query">
-    /// The fully escaped SQL.
-    /// </param>
-    /// <param name="parameters">
-    /// Arguments to substitute for the occurences of '?' in the query.
-    /// </param>
     /// <returns>
-    /// The number of rows modified in the database as a result of this execution.
+    /// The number of rows modified.
     /// </returns>
     public int Execute(string query, params IEnumerable<object?> parameters) {
         SqliteCommand command = CreateCommand(query, parameters);
         int rowCount = command.ExecuteNonQuery();
         return rowCount;
     }
-
     /// <summary>
-    /// Creates a SqliteCommand given the command text (SQL) with arguments. Place a '?'
-    /// in the command text for each of the arguments and then executes that command.
-    /// Use this method when return primitive values.
-    /// You can set the Trace or TimeExecution properties of the connection
-    /// to profile execution.
+    /// Creates and executes a <see cref="SqliteCommand"/> scalar-query.<br/>
+    /// Use this method retrieve primitive values.
     /// </summary>
-    /// <param name="query">
-    /// The fully escaped SQL.
-    /// </param>
-    /// <param name="parameters">
-    /// Arguments to substitute for the occurences of '?' in the query.
-    /// </param>
     /// <returns>
     /// The number of rows modified in the database as a result of this execution.
     /// </returns>
@@ -382,24 +188,6 @@ public partial class SqliteConnection : IDisposable {
     }
 
     /// <summary>
-    /// Executes the query on the database and returns each row of the result using the specified mapping.<br/>
-    /// Place a <c>?</c> in the query for each parameter.
-    /// </summary>
-    /// <returns>
-    /// An enumerable for each row returned by the query.
-    /// </returns>
-    /// <remarks>
-    /// The enumerator calls <c>sqlite3_step</c> on each call to MoveNext, so the database connection must remain open for the lifetime of the enumerator.
-    /// </remarks>
-    public IEnumerable<object> Query(TableMap map, string query, params IEnumerable<object?> parameters) {
-        return CreateCommand(query, parameters).ExecuteQuery<object>(map);
-    }
-    /// <inheritdoc cref="Query(TableMap, string, IEnumerable{object?})"/>
-    public IEnumerable<T> Query<T>(string query, params IEnumerable<object?> parameters) where T : new() {
-        return CreateCommand(query, parameters).ExecuteQuery<T>();
-    }
-
-    /// <summary>
     /// Creates a queryable interface to the table associated with the given type.
     /// </summary>
     /// <returns>
@@ -407,66 +195,6 @@ public partial class SqliteConnection : IDisposable {
     /// </returns>
     public TableQuery<T> Table<T>() where T : new() {
         return new TableQuery<T>(this);
-    }
-
-    /// <summary>
-    /// Retrieves an object with the primary key from the associated table.<br/>
-    /// The object must have a designated primary key.
-    /// </summary>
-    /// <returns>
-    /// The object with the primary key. Throws an exception if the object is not found.
-    /// </returns>
-    public object Get(object primaryKey, TableMap map) {
-        return Query(map, map.GetByPrimaryKeySql, primaryKey).First();
-    }
-    /// <inheritdoc cref="Get(object, TableMap)"/>
-    public T Get<T>(object primaryKey) where T : new() {
-        return Query<T>(MapTable<T>().GetByPrimaryKeySql, primaryKey).First();
-    }
-    /// <summary>
-    /// Retrieves an object matching the predicate from the associated table.
-    /// </summary>
-    /// <returns>
-    /// The first object matching the predicate. Throws an exception if the object is not found.
-    /// </returns>
-    public T Get<T>(Expression<Func<T, bool>> predicate) where T : new() {
-        return Table<T>().Where(predicate).First();
-    }
-    /// <summary>
-    /// Retrieves an object with the primary key from the associated table.<br/>
-    /// The table must have a designated primary key.
-    /// </summary>
-    /// <returns>
-    /// The object with the primary key, or <see langword="null"/> if the object is not found.
-    /// </returns>
-    public object? Find(object primaryKey, TableMap map) {
-        return Query(map, map.GetByPrimaryKeySql, primaryKey).FirstOrDefault();
-    }
-    /// <inheritdoc cref="Find(object, TableMap)"/>
-    public T? Find<T>(object primaryKey) where T : new() {
-        return Query<T>(MapTable<T>().GetByPrimaryKeySql, primaryKey).FirstOrDefault();
-    }
-    /// <summary>
-    /// Retrieves the first object matching the predicate from the associated table.
-    /// </summary>
-    /// <returns>
-    /// The first object matching the predicate, or <see langword="null"/> if no objects match the predicate.
-    /// </returns>
-    public T? Find<T>(Expression<Func<T, bool>> predicate) where T : new() {
-        return Table<T>().Where(predicate).FirstOrDefault();
-    }
-    /// <summary>
-    /// Retrieves the first object matching the SQL query from the associated table.
-    /// </summary>
-    /// <returns>
-    /// The first object matching the query, or <see langword="null"/> if no objects match the predicate.
-    /// </returns>
-    public object? FindWithQuery(TableMap map, string query, params IEnumerable<object?> parameters) {
-        return Query(map, query, parameters).FirstOrDefault();
-    }
-    /// <inheritdoc cref="FindWithQuery(TableMap, string, IEnumerable{object?})"/>
-    public T? FindWithQuery<T>(string query, params IEnumerable<object?> parameters) where T : new() {
-        return Query<T>(query, parameters).FirstOrDefault();
     }
 
     /// <summary>
@@ -557,13 +285,13 @@ public partial class SqliteConnection : IDisposable {
             return 0;
         }
 
-        TableMap map = MapTable(obj.GetType());
+        SqliteTable map = MapTable(obj.GetType());
 
-        ColumnMap[] columns = map.Columns;
+        SqliteColumn[] columns = map.Columns;
 
         // Don't insert auto-incremented columns (unless "OR REPLACE"/"OR IGNORE")
         if (string.IsNullOrEmpty(modifier)) {
-            columns = [.. columns.Where(column => !column.AutoIncrement)];
+            columns = [.. columns.Where(column => !column.IsAutoIncrement)];
         }
 
         object?[] values = new object[columns.Length];
@@ -671,12 +399,12 @@ public partial class SqliteConnection : IDisposable {
             return 0;
         }
 
-        TableMap map = MapTable(obj.GetType());
+        SqliteTable map = MapTable(obj.GetType());
 
-        ColumnMap primaryKey = map.PrimaryKey
+        SqliteColumn primaryKey = map.PrimaryKey
             ?? throw new NotSupportedException($"Can't update in table '{map.TableName}' since it has no primary key");
 
-        IEnumerable<ColumnMap> columns = map.Columns.Where(column => column != primaryKey);
+        IEnumerable<SqliteColumn> columns = map.Columns.Where(column => column != primaryKey);
         IEnumerable<object?> values = columns.Select(column => column.GetValue(obj));
         List<object?> parameters = new(values);
         if (parameters.Count == 0) {
@@ -709,14 +437,14 @@ public partial class SqliteConnection : IDisposable {
     /// <returns>
     /// The number of objects deleted.
     /// </returns>
-    public int Delete(object primaryKey, TableMap map) {
-        ColumnMap primaryKeyColumn = map.PrimaryKey
+    public int Delete(object primaryKey, SqliteTable map) {
+        SqliteColumn primaryKeyColumn = map.PrimaryKey
             ?? throw new NotSupportedException($"Can't delete in table '{map.TableName}' since it has no primary key");
         string query = $"delete from {map.TableName.SqlQuote()} where {primaryKeyColumn.Name.SqlQuote()} = ?";
         int rowCount = Execute(query, primaryKey);
         return rowCount;
     }
-    /// <inheritdoc cref="Delete(object, TableMap)"/>
+    /// <inheritdoc cref="Delete(object, SqliteTable)"/>
     public int Delete<T>(object primaryKey) {
         return Delete(primaryKey, MapTable<T>());
     }
@@ -730,7 +458,7 @@ public partial class SqliteConnection : IDisposable {
     /// The number of rows deleted.
     /// </returns>
     public int Delete(object objectToDelete) {
-        TableMap map = MapTable(objectToDelete.GetType());
+        SqliteTable map = MapTable(objectToDelete.GetType());
         return Delete(map.PrimaryKey?.GetValue(objectToDelete)!, map);
     }
     /// <inheritdoc cref="Delete(object)"/>
@@ -751,12 +479,12 @@ public partial class SqliteConnection : IDisposable {
     /// <returns>
     /// The number of objects deleted.
     /// </returns>
-    public int DeleteAll(TableMap map) {
+    public int DeleteAll(SqliteTable map) {
         string query = $"delete from {map.TableName.SqlQuote()}";
         int rowCount = Execute(query);
         return rowCount;
     }
-    /// <inheritdoc cref="DeleteAll(TableMap)"/>
+    /// <inheritdoc cref="DeleteAll(SqliteTable)"/>
     public int DeleteAll<T>() {
         return DeleteAll(MapTable<T>());
     }
@@ -801,16 +529,16 @@ public partial class SqliteConnection : IDisposable {
         return Task.Run(() => EnableLoadExtension(enabled));
     }
     /// <inheritdoc cref="MapTable(Type)"/>
-    public Task<TableMap> GetMappingAsync(Type type) {
+    public Task<SqliteTable> GetMappingAsync(Type type) {
         return Task.Run(() => MapTable(type));
     }
     /// <inheritdoc cref="GetMappingAsync()"/>
-    public Task<TableMap> GetMappingAsync<T>() where T : new() {
+    public Task<SqliteTable> GetMappingAsync<T>() where T : new() {
         return Task.Run(() => MapTable<T>());
     }
-    /// <inheritdoc cref="CreateTable(Type, string?)"/>
+    /// <inheritdoc cref="GetTable(Type, string?)"/>
     public Task<bool> CreateTableAsync(Type type, string? virtualModuleName = null) {
-        return Task.Run(() => CreateTable(type, virtualModuleName));
+        return Task.Run(() => GetTable(type, virtualModuleName));
     }
     /// <inheritdoc cref="CreateTable{T}(string?)"/>
     public Task<bool> CreateTableAsync<T>(string? virtualModuleName = null) where T : new() {
@@ -824,13 +552,13 @@ public partial class SqliteConnection : IDisposable {
     public Task<int> DropTableAsync<T>() where T : new() {
         return Task.Run(() => DropTable<T>());
     }
-    /// <inheritdoc cref="DropTable(TableMap)"/>
-    public Task<int> DropTableAsync(TableMap map) {
+    /// <inheritdoc cref="DropTable(SqliteTable)"/>
+    public Task<int> DropTableAsync(SqliteTable map) {
         return Task.Run(() => DropTable(map));
     }
-    /// <inheritdoc cref="GetColumnInfos(string)"/>
+    /// <inheritdoc cref="GetTableInfo(string)"/>
     public Task<IEnumerable<ColumnInfo>> GetTableInfoAsync(string tableName) {
-        return Task.Run(() => GetColumnInfos(tableName));
+        return Task.Run(() => GetTableInfo(tableName));
     }
     /// <inheritdoc cref="CreateIndex(string, string, IEnumerable{string}, bool)"/>
     public Task CreateIndexAsync(string indexName, string tableName, IEnumerable<string> columnNames, bool unique = false) {
@@ -876,8 +604,8 @@ public partial class SqliteConnection : IDisposable {
     public Task<int> UpdateAllAsync(IEnumerable objects) {
         return Task.Run(() => UpdateAll(objects));
     }
-    /// <inheritdoc cref="Delete(object, TableMap)"/>
-    public Task<int> DeleteAsync(object primaryKey, TableMap map) {
+    /// <inheritdoc cref="Delete(object, SqliteTable)"/>
+    public Task<int> DeleteAsync(object primaryKey, SqliteTable map) {
         return Task.Run(() => Delete(primaryKey, map));
     }
     /// <inheritdoc cref="Delete{T}(object)"/>
@@ -888,8 +616,8 @@ public partial class SqliteConnection : IDisposable {
     public Task<int> DeleteAsync(object objectToDelete) {
         return Task.Run(() => Delete(objectToDelete));
     }
-    /// <inheritdoc cref="DeleteAll(TableMap)"/>
-    public Task<int> DeleteAllAsync(TableMap map) {
+    /// <inheritdoc cref="DeleteAll(SqliteTable)"/>
+    public Task<int> DeleteAllAsync(SqliteTable map) {
         return Task.Run(() => DeleteAll(map));
     }
     /// <inheritdoc cref="DeleteAll{T}()"/>
@@ -900,8 +628,8 @@ public partial class SqliteConnection : IDisposable {
     public Task BackupAsync(string destinationDatabasePath, string databaseName = "main") {
         return Task.Run(() => Backup(destinationDatabasePath, databaseName));
     }
-    /// <inheritdoc cref="Get(object, TableMap)"/>
-    public Task<object> GetAsync(object pk, TableMap map) {
+    /// <inheritdoc cref="Get(object, SqliteTable)"/>
+    public Task<object> GetAsync(object pk, SqliteTable map) {
         return Task.Run(() => Get(pk, map));
     }
     /// <inheritdoc cref="Get{T}(object)"/>
@@ -912,8 +640,8 @@ public partial class SqliteConnection : IDisposable {
     public Task<T> GetAsync<T>(Expression<Func<T, bool>> predicate) where T : new() {
         return Task.Run(() => Get<T>(predicate));
     }
-    /// <inheritdoc cref="Find(object, TableMap)"/>
-    public Task<object?> FindAsync(object pk, TableMap map) {
+    /// <inheritdoc cref="Find(object, SqliteTable)"/>
+    public Task<object?> FindAsync(object pk, SqliteTable map) {
         return Task.Run(() => Find(pk, map));
     }
     /// <inheritdoc cref="Find(object)"/>
@@ -928,8 +656,8 @@ public partial class SqliteConnection : IDisposable {
     public Task<T?> FindWithQueryAsync<T>(string query, params IEnumerable<object?> parameters) where T : new() {
         return Task.Run(() => FindWithQuery<T>(query, parameters));
     }
-    /// <inheritdoc cref="FindWithQuery(TableMap, string, IEnumerable{object?})"/>
-    public Task<object?> FindWithQueryAsync(TableMap map, string query, params IEnumerable<object?> parameters) {
+    /// <inheritdoc cref="FindWithQuery(SqliteTable, string, IEnumerable{object?})"/>
+    public Task<object?> FindWithQueryAsync(SqliteTable map, string query, params IEnumerable<object?> parameters) {
         return Task.Run(() => FindWithQuery(map, query, parameters));
     }
     /// <inheritdoc cref="Execute(string, IEnumerable{object?})"/>
@@ -944,8 +672,8 @@ public partial class SqliteConnection : IDisposable {
     public Task<T> ExecuteScalarAsync<T>(string query, params IEnumerable<object?> parameters) {
         return Task.Run(() => ExecuteScalar<T>(query, parameters));
     }
-    /// <inheritdoc cref="Query(TableMap, string, IEnumerable{object?})"/>
-    public Task<IEnumerable<object>> QueryAsync(TableMap map, string query, params IEnumerable<object?> parameters) {
+    /// <inheritdoc cref="Query(SqliteTable, string, IEnumerable{object?})"/>
+    public Task<IEnumerable<object>> QueryAsync(SqliteTable map, string query, params IEnumerable<object?> parameters) {
         return Task.Run(() => Query(map, query, parameters));
     }
     /// <inheritdoc cref="Query{T}(string, IEnumerable{object?})"/>
@@ -960,11 +688,4 @@ public partial class SqliteConnection : IDisposable {
     public Task ChangeKeyAsync(byte[] key) {
         return Task.Run(() => ChangeKey(key));
     }
-}
-
-file struct IndexInfo {
-    public string IndexName;
-    public string TableName;
-    public bool Unique;
-    public List<string> Columns;
 }

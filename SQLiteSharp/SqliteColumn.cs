@@ -2,20 +2,20 @@
 
 namespace SQLiteSharp;
 
-public class ColumnMap {
-    public Orm Orm { get; }
+public class SqliteColumn {
+    public SqliteConnection Connection { get; }
     public string Name { get; }
     public MemberInfo ClrMember { get; }
     public Type ClrType { get; }
     public string? Collation { get; }
     public string? Check { get; }
-    public bool AutoIncrement { get; }
-    public bool PrimaryKey { get; }
-    public bool NotNull { get; }
+    public bool IsAutoIncrement { get; }
+    public bool IsPrimaryKey { get; }
+    public bool IsNotNull { get; }
     public IndexedAttribute[] Indexes { get; }
 
-    public ColumnMap(MemberInfo member, Orm? orm = null) {
-        Orm = orm ?? Orm.Default;
+    public SqliteColumn(SqliteConnection connection, MemberInfo member) {
+        Connection = connection;
 
         ClrMember = member;
         ClrType = GetMemberType(member);
@@ -26,16 +26,16 @@ public class ColumnMap {
 
         Check = Orm.GetCheck(member);
 
-        PrimaryKey = Orm.IsPrimaryKey(member) || Orm.IsImplicitPrimaryKey(member);
+        IsPrimaryKey = Orm.IsPrimaryKey(member) || Connection.Orm.IsImplicitPrimaryKey(member);
 
-        AutoIncrement = Orm.IsAutoIncrement(member) || (PrimaryKey && Orm.IsImplicitAutoIncrementedPrimaryKey(member));
+        IsAutoIncrement = Orm.IsAutoIncrement(member) || (IsPrimaryKey && Connection.Orm.IsImplicitAutoIncrementedPrimaryKey(member));
 
         Indexes = Orm.GetIndexes(member).ToArray();
-        if (Indexes.Length == 0 && !PrimaryKey && Orm.IsImplicitIndex(member)) {
+        if (Indexes.Length == 0 && !IsPrimaryKey && Connection.Orm.IsImplicitIndex(member)) {
             Indexes = [new IndexedAttribute()];
         }
 
-        NotNull = PrimaryKey || Orm.IsNotNullConstrained(member);
+        IsNotNull = IsPrimaryKey || Orm.IsNotNullConstrained(member);
     }
 
     public void SetValue(object obj, object? value) {
@@ -51,7 +51,7 @@ public class ColumnMap {
         }
     }
     public void SetSqliteValue(object obj, SqliteValue sqliteValue) {
-        TypeSerializer typeSerializer = Orm.GetTypeSerializer(ClrType);
+        TypeSerializer typeSerializer = Connection.Orm.GetTypeSerializer(ClrType);
         object? value = typeSerializer.Deserialize(sqliteValue, ClrType);
         SetValue(obj, value);
     }
@@ -67,7 +67,7 @@ public class ColumnMap {
         return memberInfo switch {
             PropertyInfo propertyInfo => propertyInfo.PropertyType,
             FieldInfo fieldInfo => fieldInfo.FieldType,
-            _ => throw new InvalidProgramException($"{nameof(ColumnMap)} only supports properties and fields."),
+            _ => throw new InvalidProgramException($"{nameof(SqliteColumn)} only supports properties and fields."),
         };
     }
 }

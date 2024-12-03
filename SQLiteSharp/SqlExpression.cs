@@ -1,4 +1,4 @@
-﻿using System.Collections;
+﻿/*using System.Collections;
 using System.Linq.Expressions;
 using System.Reflection;
 using System.Text;
@@ -10,45 +10,70 @@ public record struct SqlExpression {
     public object? Value { get; set; }
 
     public static SqlExpression FromExpression(Expression expression, IList<object?> parameters, Func<string, string> memberNameToColumnName) {
+        // Binary (a == b)
         if (expression is BinaryExpression binaryExpression) {
-            // VB turns 'x=="foo"' into 'CompareString(x,"foo",true/false)==0', so we need to unwrap it
-            // http://blogs.msdn.com/b/vbteam/archive/2007/09/18/vb-expression-trees-string-comparisons.aspx
-            if (binaryExpression.Left is MethodCallExpression leftCall) {
-                if (leftCall.Method.DeclaringType?.FullName == "Microsoft.VisualBasic.CompilerServices.Operators" && leftCall.Method.Name == "CompareString") {
-                    binaryExpression = Expression.MakeBinary(binaryExpression.NodeType, leftCall.Arguments[0], leftCall.Arguments[1]);
-                }
-            }
+            binaryExpression = ConvertVisualBasicStringEquals(binaryExpression);
 
             SqlExpression leftResult = FromExpression(binaryExpression.Left, parameters, memberNameToColumnName);
             SqlExpression rightResult = FromExpression(binaryExpression.Right, parameters, memberNameToColumnName);
 
             // If either side is a parameter and is null, then handle the other side specially (for "is null"/"is not null")
-            string text;
-            if (leftResult.CommandText == "?" && leftResult.Value == null) {
+            string sql = "(" + leftResult.CommandText + " " + GetSqlOperator(binaryExpression.NodeType) + " " + rightResult.CommandText + ")";
+
+            /*if (leftResult.CommandText is "?" && leftResult.Value is null) {
                 text = CompileNullBinaryExpression(binaryExpression, rightResult);
             }
-            else if (rightResult.CommandText == "?" && rightResult.Value == null) {
+            else if (rightResult.CommandText is "?" && rightResult.Value is null) {
                 text = CompileNullBinaryExpression(binaryExpression, leftResult);
             }
             else {
                 text = "(" + leftResult.CommandText + " " + GetSqlOperator(binaryExpression.NodeType) + " " + rightResult.CommandText + ")";
-            }
+            }*//*
+
             return new SqlExpression() {
-                CommandText = text
+                CommandText = sql,
             };
         }
-        else if (expression.NodeType is ExpressionType.Not) {
-            Expression operandExpression = ((UnaryExpression)expression).Operand;
-            SqlExpression operand = FromExpression(operandExpression, parameters, memberNameToColumnName);
-            object? value = operand.Value;
-            if (value is bool boolValue) {
-                value = !boolValue;
+        else if (expression is UnaryExpression unaryExpression) {
+            // Not (!a)
+            if (expression.NodeType is ExpressionType.Not) {
+                Expression operandExpression = unaryExpression.Operand;
+                SqlExpression operand = FromExpression(operandExpression, parameters, memberNameToColumnName);
+                object? value = operand.Value;
+                if (value is bool boolValue) {
+                    value = !boolValue;
+                }
+                return new SqlExpression() {
+                    CommandText = "not(" + operand.CommandText + ")",
+                    Value = value,
+                };
             }
-            return new SqlExpression() {
-                CommandText = "not(" + operand.CommandText + ")",
-                Value = value
-            };
+            // Cast ((a)b)
+            else if (expression.NodeType is ExpressionType.Convert) {
+                // Get value (a)
+                SqlExpression valueResult = FromExpression(unaryExpression.Operand, parameters, memberNameToColumnName);
+                // Cast value to type
+                object? castValue = ConvertTo(valueResult.Value, unaryExpression.Type);
+                //
+                return new SqlExpression() {
+                    CommandText = valueResult.CommandText,
+                    Value = castValue,
+                };
+            }
+            // Negate (-a)
+            else if (expression.NodeType is ExpressionType.Negate) {
+                // Get value (a)
+                SqlExpression valueResult = FromExpression(unaryExpression.Operand, parameters, memberNameToColumnName);
+                // Add negate command
+                string sql = $"-({valueResult.CommandText})";
+                //
+                return new SqlExpression() {
+                    CommandText = sql,
+                    Value = valueResult.Value,
+                };
+            }
         }
+        // Call (a.b())
         else if (expression.NodeType is ExpressionType.Call) {
             MethodCallExpression call = (MethodCallExpression)expression;
             SqlExpression callTarget = call.Object is not null ? FromExpression(call.Object, parameters, memberNameToColumnName) : default;
@@ -138,25 +163,19 @@ public record struct SqlExpression {
             }
 
             return new SqlExpression() {
-                CommandText = sqlCall
+                CommandText = sqlCall,
             };
         }
+        // Constant (0)
         else if (expression.NodeType is ExpressionType.Constant) {
             ConstantExpression constantExpression = (ConstantExpression)expression;
             parameters.Add(constantExpression.Value);
             return new SqlExpression() {
                 CommandText = "?",
-                Value = constantExpression.Value
+                Value = constantExpression.Value,
             };
         }
-        else if (expression.NodeType is ExpressionType.Convert) {
-            UnaryExpression unaryExpression = (UnaryExpression)expression;
-            SqlExpression valueResult = FromExpression(unaryExpression.Operand, parameters, memberNameToColumnName);
-            return new SqlExpression() {
-                CommandText = valueResult.CommandText,
-                Value = valueResult.Value is not null ? ConvertTo(valueResult.Value, unaryExpression.Type) : null
-            };
-        }
+        // Field/Property (a.b)
         else if (expression.NodeType is ExpressionType.MemberAccess) {
             MemberExpression memberExpression = (MemberExpression)expression;
 
@@ -172,7 +191,7 @@ public record struct SqlExpression {
                 // Need to translate it if that column name is mapped
                 string columnName = memberNameToColumnName(memberExpression.Member.Name);
                 return new SqlExpression() {
-                    CommandText = columnName.SqlQuote()
+                    CommandText = columnName.SqlQuote(),
                 };
             }
             else {
@@ -209,14 +228,14 @@ public record struct SqlExpression {
                     builder.Append(')');
                     return new SqlExpression() {
                         CommandText = builder.ToString(),
-                        Value = memberValue
+                        Value = memberValue,
                     };
                 }
                 else {
                     parameters.Add(memberValue);
                     return new SqlExpression() {
                         CommandText = "?",
-                        Value = memberValue
+                        Value = memberValue,
                     };
                 }
             }
@@ -229,38 +248,37 @@ public record struct SqlExpression {
     private static object? ConvertTo(object? obj, Type type) {
         return Convert.ChangeType(obj, Nullable.GetUnderlyingType(type) ?? type);
     }
+    private static string GetSqlOperator(ExpressionType expressionType) => expressionType switch {
+        ExpressionType.GreaterThan => ">",
+        ExpressionType.GreaterThanOrEqual => ">=",
+        ExpressionType.LessThan => "<",
+        ExpressionType.LessThanOrEqual => "<=",
+        ExpressionType.And => "&",
+        ExpressionType.AndAlso => "and",
+        ExpressionType.Or => "|",
+        ExpressionType.OrElse => "or",
+        ExpressionType.Equal => "=",
+        ExpressionType.NotEqual => "!=",
+        ExpressionType.Add => "+",
+        ExpressionType.Subtract => "-",
+        ExpressionType.Multiply => "*",
+        ExpressionType.Divide => "/",
+        ExpressionType.Modulo => "%",
+        ExpressionType.OnesComplement => "~",
+        ExpressionType.LeftShift => "<<",
+        ExpressionType.RightShift => ">>",
+        _ => throw new NotSupportedException($"Cannot get SQL operator for {expressionType}")
+    };
     /// <summary>
-    /// Compiles a BinaryExpression where one of the parameters is null.
+    /// VB turns <c>x == "foo"</c> into <c>CompareString(x, "foo", true/false) == 0</c>, so it needs to be converted.<br/>
+    /// See <see href="https://devblogs.microsoft.com/vbteam/vb-expression-trees-string-comparisons"/>
     /// </summary>
-    /// <param name="expression">The expression to compile</param>
-    /// <param name="parameter">The non-null parameter</param>
-    private static string CompileNullBinaryExpression(BinaryExpression expression, SqlExpression parameter) {
-        if (expression.NodeType is ExpressionType.Equal) {
-            return $"({parameter.CommandText} is ?)";
+    private static BinaryExpression ConvertVisualBasicStringEquals(BinaryExpression binaryExpression) {
+        if (binaryExpression.Left is MethodCallExpression leftCall) {
+            if (leftCall.Method.DeclaringType?.FullName == "Microsoft.VisualBasic.CompilerServices.Operators" && leftCall.Method.Name == "CompareString") {
+                binaryExpression = Expression.MakeBinary(binaryExpression.NodeType, leftCall.Arguments[0], leftCall.Arguments[1]);
+            }
         }
-        else if (expression.NodeType is ExpressionType.NotEqual) {
-            return $"({parameter.CommandText} is not ?)";
-        }
-        else if (expression.NodeType is ExpressionType.GreaterThan or ExpressionType.GreaterThanOrEqual or ExpressionType.LessThan or ExpressionType.LessThanOrEqual) {
-            return $"({parameter.CommandText} < ?)"; // always false
-        }
-        else {
-            throw new NotSupportedException($"Cannot compile Null-BinaryExpression with type {expression.NodeType}");
-        }
+        return binaryExpression;
     }
-    private static string GetSqlOperator(ExpressionType expressionType) {
-        return expressionType switch {
-            ExpressionType.GreaterThan => ">",
-            ExpressionType.GreaterThanOrEqual => ">=",
-            ExpressionType.LessThan => "<",
-            ExpressionType.LessThanOrEqual => "<=",
-            ExpressionType.And => "&",
-            ExpressionType.AndAlso => "and",
-            ExpressionType.Or => "|",
-            ExpressionType.OrElse => "or",
-            ExpressionType.Equal => "=",
-            ExpressionType.NotEqual => "!=",
-            _ => throw new NotSupportedException($"Cannot get SQL operator for {expressionType}")
-        };
-    }
-}
+}*/

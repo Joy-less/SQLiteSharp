@@ -3,9 +3,9 @@ using System.Linq.Expressions;
 
 namespace SQLiteSharp;
 
-public class TableQuery<T>(SqliteConnection connection, TableMap table) : IEnumerable<T>, IEnumerable {
+public class TableQuery<T>(SqliteConnection connection, SqliteTable table) : IEnumerable<T>, IEnumerable {
     public SqliteConnection Connection { get; } = connection;
-    public TableMap Table { get; } = table;
+    public SqliteTable Table { get; } = table;
 
     private Expression? WhereExpression;
     private List<(string ColumnName, bool Ascending)>? OrderBys;

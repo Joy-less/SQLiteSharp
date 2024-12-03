@@ -5,7 +5,6 @@ using System.Reflection;
 namespace SQLiteSharp;
 
 public class Orm {
-    public ConcurrentDictionary<Type, TableMap> TableMaps { get; } = [];
     public ConcurrentDictionary<Type, TypeSerializer> TypeSerializers { get; } = [];
     public Func<MemberInfo, bool> IsImplicitPrimaryKey { get; set; } = Member => Member.Name == "Id";
     public Func<MemberInfo, bool> IsImplicitIndex { get; set; } = Member => Member.Name.EndsWith("Id");
@@ -44,18 +43,18 @@ public class Orm {
         // Serializer not found
         throw new InvalidOperationException($"No {nameof(TypeSerializer)} found for '{type}'");
     }
-    public string GetSqlDeclaration(ColumnMap column) {
+    public string GetSqlDeclaration(SqliteColumn column) {
         TypeSerializer typeSerializer = GetTypeSerializer(column.ClrType);
 
         string declaration = $"{column.Name.SqlQuote()} {GetTypeSql(typeSerializer.SqliteType).SqlQuote()} ";
 
-        if (column.PrimaryKey) {
+        if (column.IsPrimaryKey) {
             declaration += "primary key ";
         }
-        if (column.AutoIncrement) {
+        if (column.IsAutoIncrement) {
             declaration += "autoincrement ";
         }
-        if (column.NotNull) {
+        if (column.IsNotNull) {
             declaration += "not null ";
         }
         if (column.Collation is not null) {
@@ -66,6 +65,12 @@ public class Orm {
         }
 
         return declaration;
+    }
+    public static TableAttribute? GetTableAttribute(Type type) {
+        return type.GetCustomAttribute<TableAttribute>();
+    }
+    public static IEnumerable<MemberInfo> GetPropertiesAndFields() {
+
     }
     public static bool IsPrimaryKey(MemberInfo memberInfo) {
         return memberInfo.GetCustomAttribute<PrimaryKeyAttribute>() is not null;

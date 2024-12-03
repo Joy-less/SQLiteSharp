@@ -3,10 +3,9 @@
 public class SqliteCommand(SqliteConnection connection) {
     public SqliteConnection Connection { get; } = connection;
     public string CommandText { get; set; } = "";
+    public IEnumerable<SqliteCommandParameter> Parameters { get; set; } = [];
 
     public event Action<object>? OnInstanceCreated;
-
-    private readonly List<Parameter> Parameters = [];
 
     public override string ToString() {
         return $"{CommandText} [{string.Join(", ", Parameters)}]";
@@ -27,25 +26,30 @@ public class SqliteCommand(SqliteConnection connection) {
                 throw new SqliteException(result, SqliteRaw.GetErrorMessage(Connection.Handle));
         }
     }
-    public IEnumerable<object> ExecuteQuery(TableMap map) {
+    public IEnumerable<T> ExecuteQuery<T>(SqliteTable<T> table) where T : new() {
         Sqlite3Statement statement = Prepare();
         try {
             while (SqliteRaw.Step(statement) is Result.Row) {
-                object obj = Activator.CreateInstance(map.Type)!;
+                // Create object to map
+                T obj = new();
 
                 // Iterate through found columns
                 int columnCount = SqliteRaw.GetColumnCount(statement);
                 for (int i = 0; i < columnCount; i++) {
                     // Get name of found column
                     string columnName = SqliteRaw.GetColumnName(statement, i);
+
                     // Find mapped column with same name
-                    if (map.FindColumnByColumnName(columnName) is not ColumnMap column) {
+                    if (table.Columns.FirstOrDefault(column => column.Name == columnName) is not SqliteColumn column) {
                         continue;
                     }
+
                     // Read value from found column
                     object? value = ReadColumn(statement, i, column.ClrType);
                     column.SetValue(obj, value);
                 }
+
+                // Return mapped object
                 OnInstanceCreated?.Invoke(obj);
                 yield return obj;
             }
@@ -53,12 +57,6 @@ public class SqliteCommand(SqliteConnection connection) {
         finally {
             SqliteRaw.Finalize(statement);
         }
-    }
-    public IEnumerable<T> ExecuteQuery<T>(TableMap map) {
-        return ExecuteQuery(map).Cast<T>();
-    }
-    public IEnumerable<T> ExecuteQuery<T>() {
-        return ExecuteQuery<T>(Connection.MapTable<T>());
     }
     public T ExecuteScalar<T>() {
         T Value = default!;
@@ -104,10 +102,6 @@ public class SqliteCommand(SqliteConnection connection) {
         finally {
             SqliteRaw.Finalize(statement);
         }
-    }
-
-    public void AddParameter(string? name, object? value) {
-        Parameters.Add(new Parameter(name, value));
     }
 
     private Sqlite3Statement Prepare() {
@@ -158,13 +152,13 @@ public class SqliteCommand(SqliteConnection connection) {
         SqliteValue value = SqliteRaw.GetColumnValue(statement, index);
         return typeSerializer.Deserialize(value, type);
     }
+}
 
-    private record struct Parameter(string? Name, object? Value) {
-        public string? Name { get; set; } = Name;
-        public object? Value { get; set; } = Value;
+public record struct SqliteCommandParameter(string? Name, object? Value) {
+    public string? Name { get; set; } = Name;
+    public object? Value { get; set; } = Value;
 
-        public readonly override string ToString() {
-            return Name is not null ? $"{Name} = {Value}" : $"{Value}";
-        }
+    public readonly override string ToString() {
+        return Name is not null ? $"{Name} = {Value}" : $"{Value}";
     }
 }
