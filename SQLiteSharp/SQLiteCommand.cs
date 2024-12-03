@@ -1,7 +1,7 @@
 ﻿namespace SQLiteSharp;
 
-public class SQLiteCommand(SQLiteConnection connection) {
-    public SQLiteConnection Connection { get; } = connection;
+public class SqliteCommand(SqliteConnection connection) {
+    public SqliteConnection Connection { get; } = connection;
     public string CommandText { get; set; } = "";
 
     public event Action<object>? OnInstanceCreated;
@@ -14,30 +14,30 @@ public class SQLiteCommand(SQLiteConnection connection) {
 
     public int ExecuteNonQuery() {
         Sqlite3Statement statement = Prepare();
-        Result result = SQLiteRaw.Step(statement);
-        SQLiteRaw.Finalize(statement);
+        Result result = SqliteRaw.Step(statement);
+        SqliteRaw.Finalize(statement);
 
         switch (result) {
             case Result.Done:
-                int rowCount = SQLiteRaw.Changes(Connection.Handle);
+                int rowCount = SqliteRaw.Changes(Connection.Handle);
                 return rowCount;
-            case Result.Constraint when SQLiteRaw.GetExtendedErrorCode(Connection.Handle) is ExtendedResult.ConstraintNotNull:
-                throw new NotNullConstraintViolationException(result, SQLiteRaw.GetErrorMessage(Connection.Handle));
+            case Result.Constraint when SqliteRaw.GetExtendedErrorCode(Connection.Handle) is ExtendedResult.ConstraintNotNull:
+                throw new NotNullConstraintViolationException(result, SqliteRaw.GetErrorMessage(Connection.Handle));
             default:
-                throw new SQLiteException(result, SQLiteRaw.GetErrorMessage(Connection.Handle));
+                throw new SqliteException(result, SqliteRaw.GetErrorMessage(Connection.Handle));
         }
     }
     public IEnumerable<object> ExecuteQuery(TableMap map) {
         Sqlite3Statement statement = Prepare();
         try {
-            while (SQLiteRaw.Step(statement) is Result.Row) {
+            while (SqliteRaw.Step(statement) is Result.Row) {
                 object obj = Activator.CreateInstance(map.Type)!;
 
                 // Iterate through found columns
-                int columnCount = SQLiteRaw.GetColumnCount(statement);
+                int columnCount = SqliteRaw.GetColumnCount(statement);
                 for (int i = 0; i < columnCount; i++) {
                     // Get name of found column
-                    string columnName = SQLiteRaw.GetColumnName(statement, i);
+                    string columnName = SqliteRaw.GetColumnName(statement, i);
                     // Find mapped column with same name
                     if (map.FindColumnByColumnName(columnName) is not ColumnMap column) {
                         continue;
@@ -51,7 +51,7 @@ public class SQLiteCommand(SQLiteConnection connection) {
             }
         }
         finally {
-            SQLiteRaw.Finalize(statement);
+            SqliteRaw.Finalize(statement);
         }
     }
     public IEnumerable<T> ExecuteQuery<T>(TableMap map) {
@@ -66,7 +66,7 @@ public class SQLiteCommand(SQLiteConnection connection) {
         Sqlite3Statement statement = Prepare();
 
         try {
-            Result result = SQLiteRaw.Step(statement);
+            Result result = SqliteRaw.Step(statement);
             if (result is Result.Row) {
                 object? columnValue = ReadColumn(statement, 0, typeof(T));
                 if (columnValue is not null) {
@@ -76,11 +76,11 @@ public class SQLiteCommand(SQLiteConnection connection) {
             else if (result is Result.Done) {
             }
             else {
-                throw new SQLiteException(result, SQLiteRaw.GetErrorMessage(Connection.Handle));
+                throw new SqliteException(result, SqliteRaw.GetErrorMessage(Connection.Handle));
             }
         }
         finally {
-            SQLiteRaw.Finalize(statement);
+            SqliteRaw.Finalize(statement);
         }
 
         return Value;
@@ -88,10 +88,10 @@ public class SQLiteCommand(SQLiteConnection connection) {
     public IEnumerable<T> ExecuteQueryScalars<T>() {
         Sqlite3Statement statement = Prepare();
         try {
-            if (SQLiteRaw.GetColumnCount(statement) < 1) {
+            if (SqliteRaw.GetColumnCount(statement) < 1) {
                 throw new InvalidOperationException("QueryScalars should return at least one column");
             }
-            while (SQLiteRaw.Step(statement) is Result.Row) {
+            while (SqliteRaw.Step(statement) is Result.Row) {
                 object? value = ReadColumn(statement, 0, typeof(T));
                 if (value is null) {
                     yield return default!;
@@ -102,7 +102,7 @@ public class SQLiteCommand(SQLiteConnection connection) {
             }
         }
         finally {
-            SQLiteRaw.Finalize(statement);
+            SqliteRaw.Finalize(statement);
         }
     }
 
@@ -111,7 +111,7 @@ public class SQLiteCommand(SQLiteConnection connection) {
     }
 
     private Sqlite3Statement Prepare() {
-        Sqlite3Statement statement = SQLiteRaw.Prepare(Connection.Handle, CommandText);
+        Sqlite3Statement statement = SqliteRaw.Prepare(Connection.Handle, CommandText);
         BindParameters(statement);
         return statement;
     }
@@ -119,14 +119,14 @@ public class SQLiteCommand(SQLiteConnection connection) {
         int nextIndex = 1;
         foreach ((string? name, object? value) in Parameters) {
             int index = name is not null
-                ? SQLiteRaw.BindParameterIndex(statement, name)
+                ? SqliteRaw.BindParameterIndex(statement, name)
                 : nextIndex++;
             BindParameter(statement, index, value);
         }
     }
     private void BindParameter(Sqlite3Statement statement, int index, object? value) {
         if (value is null) {
-            SQLiteRaw.BindNull(statement, index);
+            SqliteRaw.BindNull(statement, index);
             return;
         }
 
@@ -135,19 +135,19 @@ public class SQLiteCommand(SQLiteConnection connection) {
 
         switch (rawValue.SqliteType) {
             case SqliteType.Null:
-                SQLiteRaw.BindNull(statement, index);
+                SqliteRaw.BindNull(statement, index);
                 break;
             case SqliteType.Integer:
-                SQLiteRaw.BindInt64(statement, index, rawValue.AsInteger);
+                SqliteRaw.BindInt64(statement, index, rawValue.AsInteger);
                 break;
             case SqliteType.Float:
-                SQLiteRaw.BindDouble(statement, index, rawValue.AsFloat);
+                SqliteRaw.BindDouble(statement, index, rawValue.AsFloat);
                 break;
             case SqliteType.Text:
-                SQLiteRaw.BindText(statement, index, rawValue.AsText);
+                SqliteRaw.BindText(statement, index, rawValue.AsText);
                 break;
             case SqliteType.Blob:
-                SQLiteRaw.BindBlob(statement, index, rawValue.AsBlob);
+                SqliteRaw.BindBlob(statement, index, rawValue.AsBlob);
                 break;
             default:
                 throw new NotImplementedException($"Cannot bind column type '{rawValue.SqliteType}'");
@@ -155,7 +155,7 @@ public class SQLiteCommand(SQLiteConnection connection) {
     }
     private object? ReadColumn(Sqlite3Statement statement, int index, Type type) {
         TypeSerializer typeSerializer = Connection.Orm.GetTypeSerializer(type);
-        SqliteValue value = SQLiteRaw.GetColumnValue(statement, index);
+        SqliteValue value = SqliteRaw.GetColumnValue(statement, index);
         return typeSerializer.Deserialize(value, type);
     }
 

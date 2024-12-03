@@ -3,8 +3,8 @@ using System.Linq.Expressions;
 
 namespace SQLiteSharp;
 
-public class TableQuery<T>(SQLiteConnection connection, TableMap table) : IEnumerable<T>, IEnumerable {
-    public SQLiteConnection Connection { get; } = connection;
+public class TableQuery<T>(SqliteConnection connection, TableMap table) : IEnumerable<T>, IEnumerable {
+    public SqliteConnection Connection { get; } = connection;
     public TableMap Table { get; } = table;
 
     private Expression? WhereExpression;
@@ -12,7 +12,7 @@ public class TableQuery<T>(SQLiteConnection connection, TableMap table) : IEnume
     private int? Limit;
     private int? Offset;
 
-    public TableQuery(SQLiteConnection connection)
+    public TableQuery(SqliteConnection connection)
         : this(connection, connection.MapTable<T>()) {
     }
 
@@ -44,11 +44,11 @@ public class TableQuery<T>(SQLiteConnection connection, TableMap table) : IEnume
         }
 
         Expression? deletePredicate = WhereExpression.AndAlso(predicate)
-            ?? throw new InvalidOperationException($"No delete condition (use SQLiteConnection.DeleteAll to delete every item from the table)");
+            ?? throw new InvalidOperationException($"No delete condition (use SqliteConnection.DeleteAll to delete every item from the table)");
         
         List<object?> parameters = [];
         string commandText = $"delete from {Table.TableName.SqlQuote()} where {ExpressionToSql(deletePredicate, parameters).CommandText}";
-        SQLiteCommand command = Connection.CreateCommand(commandText, parameters);
+        SqliteCommand command = Connection.CreateCommand(commandText, parameters);
 
         int rowCount = command.ExecuteNonQuery();
         return rowCount;
@@ -116,7 +116,7 @@ public class TableQuery<T>(SQLiteConnection connection, TableMap table) : IEnume
             MemberName => Table.FindColumnByMemberName(MemberName)!.Name
         );
     }
-    private SQLiteCommand GenerateCommand(string selectionList) {
+    private SqliteCommand GenerateCommand(string selectionList) {
         string commandText = $"select {selectionList} from {Table.TableName.SqlQuote()}";
         List<object?> parameters = [];
         if (WhereExpression is not null) {

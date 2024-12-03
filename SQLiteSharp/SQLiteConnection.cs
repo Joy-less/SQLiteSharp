@@ -7,44 +7,44 @@ namespace SQLiteSharp;
 /// <summary>
 /// An open connection to a SQLite database.
 /// </summary>
-public partial class SQLiteConnection : IDisposable {
+public partial class SqliteConnection : IDisposable {
     public Orm Orm { get; } = new();
     public Sqlite3DatabaseHandle Handle { get; }
 
     /// <summary>
     /// The options used to open this connection.
     /// </summary>
-    public SQLiteConnectionOptions Options { get; }
+    public SqliteConnectionOptions Options { get; }
 
     /// <summary>
     /// Initializes the raw SQLite Portable Class Library.
     /// </summary>
-    static SQLiteConnection() {
+    static SqliteConnection() {
         SQLitePCL.Batteries_V2.Init();
     }
 
     /// <summary>
     /// Creates a new connection to the given SQLite database.
     /// </summary>
-    public SQLiteConnection(SQLiteConnectionOptions options) {
+    public SqliteConnection(SqliteConnectionOptions options) {
         Options = options;
 
-        Result openResult = SQLiteRaw.Open(options.DatabasePath, out Sqlite3DatabaseHandle handle, options.OpenFlags, null);
+        Result openResult = SqliteRaw.Open(options.DatabasePath, out Sqlite3DatabaseHandle handle, options.OpenFlags, null);
         Handle = handle;
 
         if (openResult is not Result.OK) {
-            throw new SQLiteException(openResult, $"Could not open database file {Options.DatabasePath.SqlQuote()}: {openResult}");
+            throw new SqliteException(openResult, $"Could not open database file {Options.DatabasePath.SqlQuote()}: {openResult}");
         }
 
         BusyTimeout = TimeSpan.FromSeconds(1.0);
 
         if (options.EncryptionKey is not null) {
-            SQLiteRaw.SetKey(Handle, options.EncryptionKey);
+            SqliteRaw.SetKey(Handle, options.EncryptionKey);
         }
     }
-    /// <inheritdoc cref="SQLiteConnection(SQLiteConnectionOptions)"/>
-    public SQLiteConnection(string databasePath, OpenFlags openFlags = OpenFlags.Recommended)
-        : this(new SQLiteConnectionOptions(databasePath, openFlags)) {
+    /// <inheritdoc cref="SqliteConnection(SqliteConnectionOptions)"/>
+    public SqliteConnection(string databasePath, OpenFlags openFlags = OpenFlags.Recommended)
+        : this(new SqliteConnectionOptions(databasePath, openFlags)) {
     }
 
     /// <summary>
@@ -58,7 +58,7 @@ public partial class SQLiteConnection : IDisposable {
         }
 
         try {
-            SQLiteRaw.Close(Handle);
+            SqliteRaw.Close(Handle);
         }
         finally {
             Handle.Dispose();
@@ -68,23 +68,23 @@ public partial class SQLiteConnection : IDisposable {
     /// <summary>
     /// The SQLite library version number. <c>3007014</c> refers to <c>v3.7.14</c>.
     /// </summary>
-    public static int SQLiteVersionNumber => SQLiteRaw.LibVersionNumber();
+    public static int SQLiteVersionNumber => SqliteRaw.LibVersionNumber();
 
     /// <summary>
     /// Changes the 256-bit (32-byte) encryption key used to encrypt/decrypt the database.
     /// </summary>
     public void ChangeKey(byte[] key) {
-        SQLiteRaw.ChangeKey(Handle, key);
+        SqliteRaw.ChangeKey(Handle, key);
     }
 
     /// <summary>
     /// Enable or disable extension loading.
     /// </summary>
     public void EnableLoadExtension(bool enabled) {
-        Result result = SQLiteRaw.EnableLoadExtension(Handle, enabled ? 1 : 0);
+        Result result = SqliteRaw.EnableLoadExtension(Handle, enabled ? 1 : 0);
         if (result is not Result.OK) {
-            string errorMessage = SQLiteRaw.GetErrorMessage(Handle);
-            throw new SQLiteException(result, errorMessage);
+            string errorMessage = SqliteRaw.GetErrorMessage(Handle);
+            throw new SqliteException(result, errorMessage);
         }
     }
 
@@ -95,7 +95,7 @@ public partial class SQLiteConnection : IDisposable {
         get => field;
         set {
             field = value;
-            SQLiteRaw.BusyTimeout(Handle, (int)field.TotalMilliseconds);
+            SqliteRaw.BusyTimeout(Handle, (int)field.TotalMilliseconds);
         }
     }
 
@@ -292,11 +292,11 @@ public partial class SQLiteConnection : IDisposable {
     }
 
     /// <summary>
-    /// Creates a new SQLiteCommand given the command text with parameters.<br/>
+    /// Creates a new SqliteCommand given the command text with parameters.<br/>
     /// Place <c>?</c> in the command text for each argument.
     /// </summary>
-    public SQLiteCommand CreateCommand(string commandText, params IEnumerable<object?> parameters) {
-        SQLiteCommand command = new(this) {
+    public SqliteCommand CreateCommand(string commandText, params IEnumerable<object?> parameters) {
+        SqliteCommand command = new(this) {
             CommandText = commandText,
         };
         foreach (object? parameter in parameters) {
@@ -305,11 +305,11 @@ public partial class SQLiteConnection : IDisposable {
         return command;
     }
     /// <summary>
-    /// Creates a new SQLiteCommand given the command text with named parameters. Place <c>@</c> or <c>:</c> or <c>$</c> followed by an alphanumeric identifier for each argument.<br/>
+    /// Creates a new SqliteCommand given the command text with named parameters. Place <c>@</c> or <c>:</c> or <c>$</c> followed by an alphanumeric identifier for each argument.<br/>
     /// For example, <c>@name</c>, <c>:name</c> and <c>$name</c> can all be used.
     /// </summary>
-    public SQLiteCommand CreateCommand(string commandText, Dictionary<string, object> parameters) {
-        SQLiteCommand command = new(this) {
+    public SqliteCommand CreateCommand(string commandText, Dictionary<string, object> parameters) {
+        SqliteCommand command = new(this) {
             CommandText = commandText,
         };
         foreach (KeyValuePair<string, object> parameter in parameters) {
@@ -319,7 +319,7 @@ public partial class SQLiteConnection : IDisposable {
     }
 
     /// <summary>
-    /// Creates a SQLiteCommand given the command text (SQL) with arguments. Place a '?'
+    /// Creates a SqliteCommand given the command text (SQL) with arguments. Place a '?'
     /// in the command text for each of the arguments and then executes that command.
     /// Use this method instead of Query when you don't expect rows back. Such cases include
     /// INSERTs, UPDATEs, and DELETEs.
@@ -336,13 +336,13 @@ public partial class SQLiteConnection : IDisposable {
     /// The number of rows modified in the database as a result of this execution.
     /// </returns>
     public int Execute(string query, params IEnumerable<object?> parameters) {
-        SQLiteCommand command = CreateCommand(query, parameters);
+        SqliteCommand command = CreateCommand(query, parameters);
         int rowCount = command.ExecuteNonQuery();
         return rowCount;
     }
 
     /// <summary>
-    /// Creates a SQLiteCommand given the command text (SQL) with arguments. Place a '?'
+    /// Creates a SqliteCommand given the command text (SQL) with arguments. Place a '?'
     /// in the command text for each of the arguments and then executes that command.
     /// Use this method when return primitive values.
     /// You can set the Trace or TimeExecution properties of the connection
@@ -358,13 +358,13 @@ public partial class SQLiteConnection : IDisposable {
     /// The number of rows modified in the database as a result of this execution.
     /// </returns>
     public T ExecuteScalar<T>(string query, params IEnumerable<object?> parameters) {
-        SQLiteCommand command = CreateCommand(query, parameters);
+        SqliteCommand command = CreateCommand(query, parameters);
         T rowCount = command.ExecuteScalar<T>();
         return rowCount;
     }
 
     /// <summary>
-    /// Creates a SQLiteCommand given the command text (SQL) with arguments. Place a '?'
+    /// Creates a SqliteCommand given the command text (SQL) with arguments. Place a '?'
     /// in the command text for each of the arguments and then executes that command.
     /// It returns the first column of each row of the result.
     /// </summary>
@@ -584,7 +584,7 @@ public partial class SQLiteConnection : IDisposable {
         int rowCount = Execute(query, values);
 
         if (map.HasAutoIncrementedPrimaryKey) {
-            long rowId = SQLiteRaw.GetLastInsertRowId(Handle);
+            long rowId = SqliteRaw.GetLastInsertRowId(Handle);
             map.SetPrimaryKeyValue(obj, rowId);
         }
 
@@ -766,33 +766,33 @@ public partial class SQLiteConnection : IDisposable {
     /// </summary>
     public void Backup(string destinationDatabasePath, string databaseName = "main") {
         // Open the destination
-        Result result = SQLiteRaw.Open(destinationDatabasePath, out Sqlite3DatabaseHandle destHandle, OpenFlags.Recommended, null);
+        Result result = SqliteRaw.Open(destinationDatabasePath, out Sqlite3DatabaseHandle destHandle, OpenFlags.Recommended, null);
         if (result is not Result.OK) {
-            throw new SQLiteException(result, "Failed to open destination database");
+            throw new SqliteException(result, "Failed to open destination database");
         }
 
         // Init the backup
-        Sqlite3BackupHandle backupHandle = SQLiteRaw.BackupInit(destHandle, databaseName, Handle, databaseName);
+        Sqlite3BackupHandle backupHandle = SqliteRaw.BackupInit(destHandle, databaseName, Handle, databaseName);
         if (backupHandle is null) {
-            SQLiteRaw.Close(destHandle);
+            SqliteRaw.Close(destHandle);
             throw new Exception("Failed to create backup");
         }
 
         // Perform it
-        SQLiteRaw.BackupStep(backupHandle, -1);
-        SQLiteRaw.BackupFinish(backupHandle);
+        SqliteRaw.BackupStep(backupHandle, -1);
+        SqliteRaw.BackupFinish(backupHandle);
 
         // Check for errors
-        result = SQLiteRaw.GetResult(destHandle);
+        result = SqliteRaw.GetResult(destHandle);
         string errorMessage = "";
         if (result is not Result.OK) {
-            errorMessage = SQLiteRaw.GetErrorMessage(destHandle);
+            errorMessage = SqliteRaw.GetErrorMessage(destHandle);
         }
 
         // Close everything and report errors
-        SQLiteRaw.Close(destHandle);
+        SqliteRaw.Close(destHandle);
         if (result is not Result.OK) {
-            throw new SQLiteException(result, errorMessage);
+            throw new SqliteException(result, errorMessage);
         }
     }
 

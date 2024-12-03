@@ -2,7 +2,7 @@
 
 namespace SQLiteSharp;
 
-public static class SQLiteRaw {
+public static class SqliteRaw {
     public static Result Open(string filename, out Sqlite3DatabaseHandle db, OpenFlags flags, string? vfsName) {
         return (Result)Sqlite3.sqlite3_open_v2(filename, out db, (int)flags, vfsName);
     }
@@ -18,7 +18,7 @@ public static class SQLiteRaw {
     public static Sqlite3Statement Prepare(Sqlite3DatabaseHandle db, string query) {
         int result = Sqlite3.sqlite3_prepare_v2(db, query, out Sqlite3Statement? statement);
         if (result != 0) {
-            throw new SQLiteException((Result)result, GetErrorMessage(db));
+            throw new SqliteException((Result)result, GetErrorMessage(db));
         }
         return statement;
     }

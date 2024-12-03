@@ -4,7 +4,7 @@ public class ReadMeTest {
     [Fact]
     public void Test1() {
         // Open a database connection
-        using SQLiteConnection Connection = new("database.db");
+        using SqliteConnection Connection = new("database.db");
 
         // Create a table for a class
         Connection.CreateTable<ShopItem>();
@@ -36,7 +36,7 @@ public class ReadMeTest {
     [Fact]
     public void Test2() {
         // Open a database connection
-        using SQLiteConnection Connection = new(":memory:");
+        using SqliteConnection Connection = new(":memory:");
 
         // Register custom type
         Connection.Orm.RegisterType<Sweet>(
