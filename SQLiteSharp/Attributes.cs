@@ -17,6 +17,10 @@ public class ColumnAttribute(string name) : Attribute {
 }
 
 [AttributeUsage(AttributeTargets.Property | AttributeTargets.Field)]
+public class IgnoreAttribute : Attribute {
+}
+
+[AttributeUsage(AttributeTargets.Property | AttributeTargets.Field)]
 public class PrimaryKeyAttribute : Attribute {
 }
 
@@ -46,8 +50,11 @@ public class UniqueAttribute : IndexedAttribute {
     }
 }
 
+/// <summary>
+/// The value is not allowed to be null.
+/// </summary>
 [AttributeUsage(AttributeTargets.Property | AttributeTargets.Field)]
-public class IgnoreAttribute : Attribute {
+public class NotNullAttribute : Attribute {
 }
 
 /// <summary>
@@ -59,16 +66,9 @@ public class CollationAttribute(string collation) : Attribute {
 }
 
 /// <summary>
-/// An expression which must be passed for the column to be valid.
+/// A SQL expression which must pass for the column to be valid.
 /// </summary>
-[AttributeUsage(AttributeTargets.Property | AttributeTargets.Field)]
+[AttributeUsage(AttributeTargets.Property | AttributeTargets.Field, AllowMultiple = true)]
 public class CheckAttribute(string check) : Attribute {
     public string Value { get; } = check;
-}
-
-/// <summary>
-/// The value is not allowed to be null.
-/// </summary>
-[AttributeUsage(AttributeTargets.Property | AttributeTargets.Field)]
-public class NotNullAttribute : Attribute {
 }
