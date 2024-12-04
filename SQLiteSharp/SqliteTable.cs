@@ -61,8 +61,8 @@ public class SqliteTable<T> where T : notnull, new() {
     /// <remarks>
     /// The enumerator calls <c>sqlite3_step</c> on each call to MoveNext, so the database connection must remain open for the lifetime of the enumerator.
     /// </remarks>
-    public IEnumerable<T> Query(string query, params IEnumerable<object?> parameters) {
-        return Connection.CreateCommand(query, parameters).Query(this);
+    public IEnumerable<T> ExecuteQuery(string query, params IEnumerable<object?> parameters) {
+        return Connection.CreateCommand(query, parameters).ExecuteQuery(this);
     }
 
     /// <summary>
@@ -73,7 +73,7 @@ public class SqliteTable<T> where T : notnull, new() {
     /// The row with the primary key, or <see langword="null"/> if the row is not found.
     /// </returns>
     public T? FindByKey(object primaryKey) {
-        return Query(GetFindByPrimaryKeySql(), primaryKey).FirstOrDefault();
+        return ExecuteQuery(GetFindByPrimaryKeySql(), primaryKey).FirstOrDefault();
     }
     /// <inheritdoc cref="FindByKey(object)"/>
     public Task<T?> FindByKeyAsync(object primaryKey) {
@@ -101,7 +101,7 @@ public class SqliteTable<T> where T : notnull, new() {
     /// The first row matching the query, or <see langword="null"/> if no rows match the query.
     /// </returns>
     public T? FindOneByQuery(string query, params IEnumerable<object?> parameters) {
-        return Query(query, parameters).FirstOrDefault();
+        return ExecuteQuery(query, parameters).FirstOrDefault();
     }
     /// <inheritdoc cref="FindOneByQuery(string, IEnumerable{object?})"/>
     public Task<T?> FindOneByQueryAsync(string query, params IEnumerable<object?> parameters) {
@@ -113,7 +113,7 @@ public class SqliteTable<T> where T : notnull, new() {
     /// The <paramref name="modifier"/> is literal SQL added after <c>INSERT</c> (e.g. <c>OR REPLACE</c>).
     /// </summary>
     /// <returns>The number of rows added.</returns>
-    public int InsertOne(T row, string? modifier = null) {
+    public int Insert(T row, string? modifier = null) {
         SqliteColumn[] columns = Columns;
         // Strip auto-incremented columns (unless "OR REPLACE"/"OR IGNORE")
         if (string.IsNullOrEmpty(modifier)) {
@@ -142,9 +142,9 @@ public class SqliteTable<T> where T : notnull, new() {
 
         return rowCount;
     }
-    /// <inheritdoc cref="InsertOne(T, string?)"/>
-    public Task<int> InsertOneAsync(T row, string? modifier = null) {
-        return Task.Run(() => InsertOne(row, modifier));
+    /// <inheritdoc cref="Insert(T, string?)"/>
+    public Task<int> InsertAsync(T row, string? modifier = null) {
+        return Task.Run(() => Insert(row, modifier));
     }
 
     /// <summary>
@@ -156,7 +156,7 @@ public class SqliteTable<T> where T : notnull, new() {
         int counter = 0;
         Connection.RunInTransaction(() => {
             foreach (T row in rows) {
-                counter += InsertOne(row, modifier);
+                counter += Insert(row, modifier);
             }
         });
         return counter;
@@ -174,7 +174,7 @@ public class SqliteTable<T> where T : notnull, new() {
     /// </remarks>
     /// <returns>The number of rows added/modified.</returns>
     public int InsertOrReplace(T row) {
-        return InsertOne(row, "OR REPLACE");
+        return Insert(row, "OR REPLACE");
     }
     /// <inheritdoc cref="InsertOrReplace(T)"/>
     public Task<int> InsertOrReplaceAsync(T row) {
@@ -210,7 +210,7 @@ public class SqliteTable<T> where T : notnull, new() {
     /// </remarks>
     /// <returns>The number of rows modified.</returns>
     public int InsertOrIgnore(T row) {
-        return InsertOne(row, "OR IGNORE");
+        return Insert(row, "OR IGNORE");
     }
     /// <inheritdoc cref="InsertOrIgnore(T)"/>
     public Task<int> InsertOrIgnoreAsync(T row) {
@@ -492,7 +492,7 @@ public class SqliteTable<T> where T : notnull, new() {
         // Get annotated column indexes
         Dictionary<string, IndexInfo> indexes = [];
         foreach (SqliteColumn column in Columns) {
-            foreach (IndexedAttribute index in column.Indexes) {
+            foreach (IndexAttribute index in column.Indexes) {
                 // Choose name for index
                 string indexName = index.Name ?? $"{TableName}_{column.Name}";
                 // Find index from another column

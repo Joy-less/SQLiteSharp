@@ -12,7 +12,7 @@ public class SqliteColumn {
     public bool IsAutoIncrement { get; }
     public bool IsPrimaryKey { get; }
     public bool IsNotNull { get; }
-    public IndexedAttribute[] Indexes { get; }
+    public IndexAttribute[] Indexes { get; }
 
     public SqliteColumn(SqliteConnection connection, MemberInfo member) {
         Connection = connection;
@@ -32,9 +32,9 @@ public class SqliteColumn {
         IsAutoIncrement = member.GetCustomAttribute<AutoIncrementAttribute>() is not null
             || (IsPrimaryKey && Connection.Orm.IsImplicitAutoIncrementedPrimaryKey(member));
 
-        Indexes = [.. member.GetCustomAttributes<IndexedAttribute>()];
+        Indexes = [.. member.GetCustomAttributes<IndexAttribute>()];
         if (Indexes.Length == 0 && !IsPrimaryKey && Connection.Orm.IsImplicitIndex(member)) {
-            Indexes = [new IndexedAttribute()];
+            Indexes = [new IndexAttribute()];
         }
 
         IsNotNull = member.GetCustomAttribute<NotNullAttribute>() is not null

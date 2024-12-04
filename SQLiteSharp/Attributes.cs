@@ -1,8 +1,8 @@
 ﻿namespace SQLiteSharp;
 
 [AttributeUsage(AttributeTargets.Class | AttributeTargets.Struct)]
-public class TableAttribute(string name) : Attribute {
-    public string Name { get; set; } = name;
+public class TableAttribute(string? name) : Attribute {
+    public string? Name { get; set; } = name;
 
     /// <summary>
     /// Whether to create the table without <c>rowid</c> (see <see href="https://sqlite.org/withoutrowid.html"/>).<br/>
@@ -17,33 +17,25 @@ public class ColumnAttribute(string name) : Attribute {
 }
 
 [AttributeUsage(AttributeTargets.Property | AttributeTargets.Field)]
-public class IgnoreAttribute : Attribute {
+public class IgnoreAttribute() : Attribute {
 }
 
 [AttributeUsage(AttributeTargets.Property | AttributeTargets.Field)]
-public class PrimaryKeyAttribute : Attribute {
+public class PrimaryKeyAttribute() : Attribute {
 }
 
 [AttributeUsage(AttributeTargets.Property | AttributeTargets.Field)]
-public class AutoIncrementAttribute : Attribute {
+public class AutoIncrementAttribute() : Attribute {
 }
 
 [AttributeUsage(AttributeTargets.Property | AttributeTargets.Field, AllowMultiple = true)]
-public class IndexedAttribute : Attribute {
-    public string? Name { get; set; }
-    public int Order { get; set; }
+public class IndexAttribute(string? name = null) : Attribute {
+    public string? Name { get; set; } = name;
     public virtual bool Unique { get; set; }
-
-    public IndexedAttribute() {
-    }
-    public IndexedAttribute(string name, int order) {
-        Name = name;
-        Order = order;
-    }
 }
 
 [AttributeUsage(AttributeTargets.Property | AttributeTargets.Field)]
-public class UniqueAttribute : IndexedAttribute {
+public class UniqueAttribute() : IndexAttribute {
     public override bool Unique {
         get => true;
         set => throw new InvalidOperationException();
@@ -54,11 +46,11 @@ public class UniqueAttribute : IndexedAttribute {
 /// The value is not allowed to be null.
 /// </summary>
 [AttributeUsage(AttributeTargets.Property | AttributeTargets.Field)]
-public class NotNullAttribute : Attribute {
+public class NotNullAttribute() : Attribute {
 }
 
 /// <summary>
-/// The string comparison type to use (see <see cref="CollationType"/>).
+/// The method of string comparison to use with the value (see <see cref="CollationType"/>).
 /// </summary>
 [AttributeUsage(AttributeTargets.Property | AttributeTargets.Field)]
 public class CollationAttribute(string collation) : Attribute {

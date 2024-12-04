@@ -10,7 +10,7 @@ public class OperatorTest {
         SqliteTable<ShopItem> ShopItems = Connection.GetTable<ShopItem>("ShopItems");
 
         // Insert items into the table
-        Connection.Insert(new ShopItem() {
+        ShopItems.Insert(new ShopItem() {
             ItemName = "dragonfruit",
             Count = 1,
         });

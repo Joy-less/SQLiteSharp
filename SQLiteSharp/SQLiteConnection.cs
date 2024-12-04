@@ -1,7 +1,4 @@
-﻿using System.Collections;
-using System.Linq.Expressions;
-
-namespace SQLiteSharp;
+﻿namespace SQLiteSharp;
 
 /// <summary>
 /// An open connection to a SQLite database.
@@ -47,6 +44,22 @@ public partial class SqliteConnection : IDisposable {
     }
 
     /// <summary>
+    /// The SQLite library version number. <c>3007014</c> refers to <c>v3.7.14</c>.
+    /// </summary>
+    public static int SqliteVersionNumber => SqliteRaw.LibVersionNumber();
+
+    /// <summary>
+    /// When an operation can't be completed because a table is locked, the operation will be regularly repeated until <see cref="BusyTimeout"/> has elapsed.
+    /// </summary>
+    public TimeSpan BusyTimeout {
+        get => field;
+        set {
+            field = value;
+            SqliteRaw.BusyTimeout(Handle, (int)field.TotalMilliseconds);
+        }
+    }
+
+    /// <summary>
     /// Closes the connection to the database.
     /// </summary>
     public void Dispose() {
@@ -63,11 +76,6 @@ public partial class SqliteConnection : IDisposable {
             Handle.Dispose();
         }
     }
-
-    /// <summary>
-    /// The SQLite library version number. <c>3007014</c> refers to <c>v3.7.14</c>.
-    /// </summary>
-    public static int SqliteVersionNumber => SqliteRaw.LibVersionNumber();
 
     /// <summary>
     /// Changes the 256-bit (32-byte) encryption key used to encrypt/decrypt the database.
@@ -96,19 +104,8 @@ public partial class SqliteConnection : IDisposable {
     }
 
     /// <summary>
-    /// When an operation can't be completed because a table is locked, the operation will be regularly repeated until <see cref="BusyTimeout"/> has elapsed.
-    /// </summary>
-    public TimeSpan BusyTimeout {
-        get => field;
-        set {
-            field = value;
-            SqliteRaw.BusyTimeout(Handle, (int)field.TotalMilliseconds);
-        }
-    }
-
-    /// <summary>
     /// Gets or creates a table for the given type.<br/>
-    /// Indexes are also created for columns with <see cref="IndexedAttribute"/>.<br/>
+    /// Indexes are also created for columns with <see cref="IndexAttribute"/>.<br/>
     /// You can create a virtual table using <paramref name="virtualModule"/>.
     /// For example, passing "fts5" creates a virtual table using <see href="https://www.sql-easy.com/learn/sqlite-full-text-search">Full Text Search v5</see>.
     /// </summary>
@@ -133,7 +130,7 @@ public partial class SqliteConnection : IDisposable {
     /// </summary>
     public IEnumerable<ColumnInfo> GetTableInfo(string tableName) {
         string query = $"pragma table_info({tableName.SqlQuote()})";
-        return CreateCommand(query).Query(GetTablePlaceholder<ColumnInfo>("table_info"));
+        return CreateCommand(query).ExecuteQuery(GetTablePlaceholder<ColumnInfo>("table_info"));
     }
     /// <inheritdoc cref="GetTableInfo(string)"/>
     public Task<IEnumerable<ColumnInfo>> GetTableInfoAsync(string tableName) {
@@ -204,7 +201,7 @@ public partial class SqliteConnection : IDisposable {
     /// </returns>
     public IEnumerable<T> QueryScalars<T>(string query, params IEnumerable<object?> parameters) {
         SqliteCommand command = CreateCommand(query, parameters);
-        return command.QueryScalars<T>();
+        return command.ExecuteQueryScalars<T>();
     }
     /// <inheritdoc cref="QueryScalars{T}(string, IEnumerable{object?})"/>
     public Task<IEnumerable<T>> QueryScalarsAsync<T>(string query, params IEnumerable<object?> parameters) {

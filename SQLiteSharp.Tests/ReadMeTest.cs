@@ -15,14 +15,14 @@ public class ReadMeTest {
         SqliteTable<ShopItem> ShopItems = Connection.GetTable<ShopItem>();
 
         // Delete all existing items in the table
-        Connection.DeleteAll<ShopItem>();
+        ShopItems.DeleteAll();
 
         // Insert items into the table
-        ShopItems.InsertOne(new ShopItem() {
+        ShopItems.Insert(new ShopItem() {
             ItemName = "Apple",
             Count = 10,
         });
-        ShopItems.InsertOne(new ShopItem() {
+        ShopItems.Insert(new ShopItem() {
             ItemName = "Banana",
             Count = 5,
         });
@@ -32,7 +32,7 @@ public class ReadMeTest {
         Assert.NotNull(Apple);
 
         // Delete an item from the table
-        Connection.Delete(Apple);
+        ShopItems.DeleteByKey(Apple.Id);
 
         // Find several items in the table
         List<ShopItem> Bananas = Connection.Table<ShopItem>().Where(ShopItem => ShopItem.ItemName == "Banana").ToList();
@@ -51,10 +51,10 @@ public class ReadMeTest {
         );
 
         // Create a table for a class
-        Connection.GetTable<SweetWrapper>();
+        SqliteTable<SweetWrapper> Sweets = Connection.GetTable<SweetWrapper>();
 
         // Insert items into the table
-        Connection.Insert(new SweetWrapper() {
+        Sweets.Insert(new SweetWrapper() {
             Sweet = new Sweet("orange"),
         });
 

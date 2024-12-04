@@ -24,7 +24,7 @@ public class SqliteCommand(SqliteConnection connection) {
             throw new SqliteException(result, SqliteRaw.GetErrorMessage(Connection.Handle));
         }
     }
-    public IEnumerable<T> Query<T>(SqliteTable<T> table) where T : notnull, new() {
+    public IEnumerable<T> ExecuteQuery<T>(SqliteTable<T> table) where T : notnull, new() {
         Sqlite3Statement statement = Prepare();
         try {
             while (SqliteRaw.Step(statement) is Result.Row) {
@@ -56,7 +56,7 @@ public class SqliteCommand(SqliteConnection connection) {
             SqliteRaw.Finalize(statement);
         }
     }
-    public IEnumerable<T> QueryScalars<T>() {
+    public IEnumerable<T> ExecuteQueryScalars<T>() {
         Sqlite3Statement statement = Prepare();
         try {
             while (true) {
