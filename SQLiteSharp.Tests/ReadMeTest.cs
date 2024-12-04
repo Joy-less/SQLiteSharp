@@ -12,23 +12,23 @@ public class ReadMeTest {
         using SqliteConnection Connection = new("database.db");
 
         // Create a table for a class
-        Connection.GetTable<ShopItem>();
+        SqliteTable<ShopItem> ShopItems = Connection.GetTable<ShopItem>();
 
         // Delete all existing items in the table
         Connection.DeleteAll<ShopItem>();
 
         // Insert items into the table
-        Connection.Insert(new ShopItem() {
+        ShopItems.InsertOne(new ShopItem() {
             ItemName = "Apple",
             Count = 10,
         });
-        Connection.Insert(new ShopItem() {
+        ShopItems.InsertOne(new ShopItem() {
             ItemName = "Banana",
             Count = 5,
         });
 
         // Find one item in the table matching a predicate
-        ShopItem? Apple = Connection.Find<ShopItem>(ShopItem => ShopItem.ItemName == "Apple");
+        ShopItem? Apple = ShopItems.FindOne(ShopItem => ShopItem.ItemName == "Apple");
         Assert.NotNull(Apple);
 
         // Delete an item from the table
@@ -51,7 +51,7 @@ public class ReadMeTest {
         );
 
         // Create a table for a class
-        Connection.CreateTable<SweetWrapper>();
+        Connection.GetTable<SweetWrapper>();
 
         // Insert items into the table
         Connection.Insert(new SweetWrapper() {

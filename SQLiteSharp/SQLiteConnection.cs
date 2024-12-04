@@ -1,5 +1,4 @@
 ﻿using System.Collections;
-using System.Reflection;
 using System.Linq.Expressions;
 
 namespace SQLiteSharp;
@@ -68,24 +67,32 @@ public partial class SqliteConnection : IDisposable {
     /// <summary>
     /// The SQLite library version number. <c>3007014</c> refers to <c>v3.7.14</c>.
     /// </summary>
-    public static int SQLiteVersionNumber => SqliteRaw.LibVersionNumber();
+    public static int SqliteVersionNumber => SqliteRaw.LibVersionNumber();
 
     /// <summary>
     /// Changes the 256-bit (32-byte) encryption key used to encrypt/decrypt the database.
     /// </summary>
-    public void ChangeKey(byte[] key) {
-        SqliteRaw.ChangeKey(Handle, key);
+    public void ChangeKey(byte[] key, string dbName = "main") {
+        SqliteRaw.ChangeKey(Handle, key, dbName);
+    }
+    /// <inheritdoc cref="ChangeKey(byte[], string)"/>
+    public Task ChangeKeyAsync(byte[] key) {
+        return Task.Run(() => ChangeKey(key));
     }
 
     /// <summary>
-    /// Enable or disable extension loading.
+    /// Enables or disables <see href="https://sqlite.org/loadext.html">extension loading</see>.
     /// </summary>
-    public void EnableLoadExtension(bool enabled) {
-        Result result = SqliteRaw.EnableLoadExtension(Handle, enabled ? 1 : 0);
+    public void SetExtensionLoadingEnabled(bool enabled) {
+        Result result = SqliteRaw.SetExtensionLoadingEnabled(Handle, enabled ? 1 : 0);
         if (result is not Result.OK) {
             string errorMessage = SqliteRaw.GetErrorMessage(Handle);
             throw new SqliteException(result, errorMessage);
         }
+    }
+    /// <inheritdoc cref="SetExtensionLoadingEnabled(bool)"/>
+    public Task EnableLoadExtensionAsync(bool enabled) {
+        return Task.Run(() => SetExtensionLoadingEnabled(enabled));
     }
 
     /// <summary>
@@ -105,8 +112,20 @@ public partial class SqliteConnection : IDisposable {
     /// You can create a virtual table using <paramref name="virtualModule"/>.
     /// For example, passing "fts5" creates a virtual table using <see href="https://www.sql-easy.com/learn/sqlite-full-text-search">Full Text Search v5</see>.
     /// </summary>
-    public SqliteTable<T> GetTable<T>(string? tableName = null, string? virtualModule = null) where T : new() {
+    public SqliteTable<T> GetTable<T>(string? tableName = null, string? virtualModule = null) where T : notnull, new() {
         return new SqliteTable<T>(this, tableName, virtualModule);
+    }
+    /// <inheritdoc cref="GetTable{T}(string?, string?)"/>
+    public Task<SqliteTable<T>> GetTableAsync<T>(string? tableName = null, string? virtualModule = null) where T : notnull, new() {
+        return Task.Run(() => GetTable<T>(tableName, virtualModule));
+    }
+
+    /// <summary>
+    /// Gets a table for the given type without actually creating it in the database.<br/>
+    /// This is useful for retrieving rows from <c>pragma</c> tables such as <c>table_info</c>.
+    /// </summary>
+    internal SqliteTable<T> GetTablePlaceholder<T>(string? tableName = null) where T : notnull, new() {
+        return new SqliteTable<T>(this, tableName, createTable: false);
     }
 
     /// <summary>
@@ -114,10 +133,25 @@ public partial class SqliteConnection : IDisposable {
     /// </summary>
     public IEnumerable<ColumnInfo> GetTableInfo(string tableName) {
         string query = $"pragma table_info({tableName.SqlQuote()})";
-        return CreateCommand(query).ExecuteQuery<ColumnInfo>(GetTable(tableName));
+        return CreateCommand(query).Query(GetTablePlaceholder<ColumnInfo>("table_info"));
     }
+    /// <inheritdoc cref="GetTableInfo(string)"/>
+    public Task<IEnumerable<ColumnInfo>> GetTableInfoAsync(string tableName) {
+        return Task.Run(() => GetTableInfo(tableName));
+    }
+
+    /// <summary>
+    /// Returns true if the <c>table_info</c> pragma returns any rows.
+    /// </summary>
+    /// <remarks>
+    /// Tables must have at least one row in SQLite.
+    /// </remarks>
     public bool TableExists(string tableName) {
         return GetTableInfo(tableName).Any();
+    }
+    /// <inheritdoc cref="TableExists(string)"/>
+    public Task<bool> TableExistsAsync(string tableName) {
+        return Task.Run(() => TableExists(tableName));
     }
 
     /// <summary>
@@ -145,7 +179,7 @@ public partial class SqliteConnection : IDisposable {
     }
 
     /// <summary>
-    /// Creates and executes a <see cref="SqliteCommand"/> non-query.<br/>
+    /// Creates a <see cref="SqliteCommand"/> and executes a non query.<br/>
     /// Use this method when you don't expect rows back.
     /// </summary>
     /// <returns>
@@ -153,38 +187,43 @@ public partial class SqliteConnection : IDisposable {
     /// </returns>
     public int Execute(string query, params IEnumerable<object?> parameters) {
         SqliteCommand command = CreateCommand(query, parameters);
-        int rowCount = command.ExecuteNonQuery();
+        int rowCount = command.Execute();
         return rowCount;
     }
-    /// <summary>
-    /// Creates and executes a <see cref="SqliteCommand"/> scalar-query.<br/>
-    /// Use this method retrieve primitive values.
-    /// </summary>
-    /// <returns>
-    /// The number of rows modified in the database as a result of this execution.
-    /// </returns>
-    public T ExecuteScalar<T>(string query, params IEnumerable<object?> parameters) {
-        SqliteCommand command = CreateCommand(query, parameters);
-        T rowCount = command.ExecuteScalar<T>();
-        return rowCount;
+    /// <inheritdoc cref="Execute(string, IEnumerable{object?})"/>
+    public Task<int> ExecuteAsync(string query, params IEnumerable<object?> parameters) {
+        return Task.Run(() => Execute(query, parameters));
     }
 
     /// <summary>
-    /// Creates a SqliteCommand given the command text (SQL) with arguments. Place a '?'
-    /// in the command text for each of the arguments and then executes that command.
-    /// It returns the first column of each row of the result.
+    /// Creates a <see cref="SqliteCommand"/> and executes a multiple scalar query.<br/>
+    /// Use this method retrieve multiple primitive values.
     /// </summary>
-    /// <param name="query">
-    /// The fully escaped SQL.
-    /// </param>
-    /// <param name="parameters">
-    /// Arguments to substitute for the occurences of '?' in the query.
-    /// </param>
     /// <returns>
-    /// An enumerable with one result for the first column of each row returned by the query.
+    /// The first column of each row returned by the query.
     /// </returns>
-    public List<T> QueryScalars<T>(string query, params IEnumerable<object?> parameters) {
-        return CreateCommand(query, parameters).ExecuteQueryScalars<T>().ToList();
+    public IEnumerable<T> QueryScalars<T>(string query, params IEnumerable<object?> parameters) {
+        SqliteCommand command = CreateCommand(query, parameters);
+        return command.QueryScalars<T>();
+    }
+    /// <inheritdoc cref="QueryScalars{T}(string, IEnumerable{object?})"/>
+    public Task<IEnumerable<T>> QueryScalarsAsync<T>(string query, params IEnumerable<object?> parameters) {
+        return Task.Run(() => QueryScalars<T>(query, parameters));
+    }
+
+    /// <summary>
+    /// Creates a <see cref="SqliteCommand"/> and executes a single scalar query.<br/>
+    /// Use this method to retrieve a single primitive value.
+    /// </summary>
+    /// <returns>
+    /// The first column of the first row returned by the query.
+    /// </returns>
+    public T QueryScalar<T>(string query, params IEnumerable<object?> parameters) {
+        return QueryScalars<T>(query, parameters).First();
+    }
+    /// <inheritdoc cref="QueryScalar{T}(string, IEnumerable{object?})"/>
+    public Task<T> QueryScalarAsync<T>(string query, params IEnumerable<object?> parameters) {
+        return Task.Run(() => QueryScalar<T>(query, parameters));
     }
 
     /// <summary>
@@ -201,7 +240,7 @@ public partial class SqliteConnection : IDisposable {
     /// Creates a transaction or savepoint for commands to be rolled back or committed.<br/>
     /// Call <see cref="Rollback(string?)"/> to cancel the transaction or <see cref="Commit(string?)"/> to perform the transaction.
     /// </summary>
-    public void SavePoint(string? savePointName = null) {
+    public void CreateTransaction(string? savePointName = null) {
         try {
             // Create savepoint
             if (savePointName is not null) {
@@ -218,8 +257,13 @@ public partial class SqliteConnection : IDisposable {
             throw;
         }
     }
+    /// <inheritdoc cref="CreateTransaction(string?)"/>
+    public Task CreateTransactionAsync(string? savePointName = null) {
+        return Task.Run(() => CreateTransaction(savePointName));
+    }
+
     /// <summary>
-    /// Rolls back the transaction to a point begun by <see cref="BeginTransaction()"/> or <see cref="SavePoint(string)"/>.
+    /// Rolls back the transaction to a point begun by <see cref="BeginTransaction()"/> or <see cref="CreateTransaction(string)"/>.
     /// </summary>
     public void Rollback(string? savePointName = null) {
         try {
@@ -238,8 +282,13 @@ public partial class SqliteConnection : IDisposable {
             throw;
         }
     }
+    /// <inheritdoc cref="Rollback(string?)"/>
+    public Task RollbackAsync(string? savePointName = null) {
+        return Task.Run(() => Rollback(savePointName));
+    }
+
     /// <summary>
-    /// Commits the transaction that was begun by <see cref="BeginTransaction()"/> or <see cref="SavePoint(string)"/>.
+    /// Commits the transaction that was begun by <see cref="BeginTransaction()"/> or <see cref="CreateTransaction(string)"/>.
     /// </summary>
     public void Commit(string? savePointName = null) {
         try {
@@ -258,14 +307,19 @@ public partial class SqliteConnection : IDisposable {
             throw;
         }
     }
+    /// <inheritdoc cref="Commit(string?)"/>
+    public Task CommitAsync(string? savePointName = null) {
+        return Task.Run(() => Commit(savePointName));
+    }
+
     /// <summary>
-    /// Creates a savepoint with a random name, executes the action and commits the transaction.<br/>
-    /// The action is rolled back on failure.
+    /// Creates a savepoint with a random <see cref="Guid"/> name, executes the action and commits the transaction.<br/>
+    /// The savepoint is rolled back if an exception is thrown.
     /// </summary>
     public void RunInTransaction(Action action) {
         string savePointName = Guid.NewGuid().ToString();
         try {
-            SavePoint(savePointName);
+            CreateTransaction(savePointName);
             action();
             Commit(savePointName);
         }
@@ -274,239 +328,29 @@ public partial class SqliteConnection : IDisposable {
             throw;
         }
     }
-
-    /// <summary>
-    /// Inserts the given object into the table, updating any auto-incremented primary keys.<br/>
-    /// The <paramref name="modifier"/> is literal SQL added after <c>INSERT</c> (e.g. <c>OR REPLACE</c>).
-    /// </summary>
-    /// <returns>The number of rows added.</returns>
-    public int Insert(object obj, string? modifier = null) {
-        if (obj is null) {
-            return 0;
-        }
-
-        SqliteTable map = MapTable(obj.GetType());
-
-        SqliteColumn[] columns = map.Columns;
-
-        // Don't insert auto-incremented columns (unless "OR REPLACE"/"OR IGNORE")
-        if (string.IsNullOrEmpty(modifier)) {
-            columns = [.. columns.Where(column => !column.IsAutoIncrement)];
-        }
-
-        object?[] values = new object[columns.Length];
-        for (int i = 0; i < values.Length; i++) {
-            values[i] = columns[i].GetValue(obj);
-        }
-
-        string query;
-        if (columns.Length == 0) {
-            query = $"insert {modifier} into {map.TableName.SqlQuote()} default values";
-        }
-        else {
-            string columnsSql = string.Join(",", columns.Select(column => column.Name.SqlQuote()));
-            string valuesSql = string.Join(",", columns.Select(column => "?"));
-            query = $"insert {modifier} into {map.TableName.SqlQuote()}({columnsSql}) values ({valuesSql})";
-        }
-
-        int rowCount = Execute(query, values);
-
-        if (map.HasAutoIncrementedPrimaryKey) {
-            long rowId = SqliteRaw.GetLastInsertRowId(Handle);
-            map.SetPrimaryKeyValue(obj, rowId);
-        }
-
-        return rowCount;
-    }
-    /// <summary>
-    /// Inserts each object into the table, updating any auto-incremented primary keys.<br/>
-    /// The <paramref name="modifier"/> is literal SQL added after <c>INSERT</c> (e.g. <c>OR REPLACE</c>).
-    /// </summary>
-    /// <returns>The number of rows added.</returns>
-    public int InsertAll(IEnumerable objects, string? modifier = null) {
-        int counter = 0;
-        RunInTransaction(() => {
-            foreach (object obj in objects) {
-                counter += Insert(obj, modifier);
-            }
-        });
-        return counter;
-    }
-    /// <summary>
-    /// Inserts the given object into the table, updating any auto-incremented primary keys.<br/>
-    /// The <paramref name="modifier"/> is literal SQL added after <c>INSERT</c> (e.g. <c>OR REPLACE</c>).
-    /// </summary>
-    /// <remarks>
-    /// If a UNIQUE constraint violation occurs, the old object is replaced.
-    /// </remarks>
-    /// <returns>The number of rows added/modified.</returns>
-    public int InsertOrReplace(object obj) {
-        return Insert(obj, "OR REPLACE");
-    }
-    /// <summary>
-    /// Inserts each object into the table, updating any auto-incremented primary keys.<br/>
-    /// </summary>
-    /// <remarks>
-    /// If a UNIQUE constraint violation occurs, the old object is replaced.
-    /// </remarks>
-    /// <returns>The number of rows added/modified.</returns>
-    public int InsertOrReplaceAll(IEnumerable objects) {
-        int counter = 0;
-        RunInTransaction(() => {
-            foreach (object obj in objects) {
-                counter += InsertOrReplace(obj);
-            }
-        });
-        return counter;
-    }
-    /// <summary>
-    /// Inserts the given object into the table, updating any auto-incremented primary keys.<br/>
-    /// The <paramref name="modifier"/> is literal SQL added after <c>INSERT</c> (e.g. <c>OR REPLACE</c>).
-    /// </summary>
-    /// <remarks>
-    /// If a UNIQUE constraint violation occurs, the new object is not inserted.
-    /// </remarks>
-    /// <returns>The number of rows modified.</returns>
-    public int InsertOrIgnore(object obj) {
-        return Insert(obj, "OR IGNORE");
-    }
-    /// <summary>
-    /// Inserts each object into the table, updating any auto-incremented primary keys.<br/>
-    /// </summary>
-    /// <remarks>
-    /// If a UNIQUE constraint violation occurs, the new object is not inserted.
-    /// </remarks>
-    /// <returns>The number of rows added/modified.</returns>
-    public int InsertOrIgnoreAll(IEnumerable objects) {
-        int counter = 0;
-        RunInTransaction(() => {
-            foreach (object obj in objects) {
-                counter += InsertOrIgnore(obj);
-            }
-        });
-        return counter;
-    }
-
-    /// <summary>
-    /// Updates all of the columns of a table using the specified object except for its primary key.<br/>
-    /// The table must have a designated primary key.
-    /// </summary>
-    /// <returns>
-    /// The number of rows updated.
-    /// </returns>
-    public int Update(object obj) {
-        if (obj is null) {
-            return 0;
-        }
-
-        SqliteTable map = MapTable(obj.GetType());
-
-        SqliteColumn primaryKey = map.PrimaryKey
-            ?? throw new NotSupportedException($"Can't update in table '{map.TableName}' since it has no primary key");
-
-        IEnumerable<SqliteColumn> columns = map.Columns.Where(column => column != primaryKey);
-        IEnumerable<object?> values = columns.Select(column => column.GetValue(obj));
-        List<object?> parameters = new(values);
-        if (parameters.Count == 0) {
-            // There is a primary key but no accompanying data,
-            // so reset the primary key to make the UPDATE work.
-            columns = map.Columns;
-            values = columns.Select(column => column.GetValue(obj));
-            parameters = new List<object?>(values);
-        }
-        parameters.Add(primaryKey.GetValue(obj));
-        string query = $"update {map.TableName.SqlQuote()} set {string.Join(",", columns.Select(column => $"{column.Name.SqlQuote()} = ? "))} where \"{primaryKey.Name}\" = ?";
-
-        int rowCount = Execute(query, parameters);
-        return rowCount;
-    }
-    /// <inheritdoc cref="Update(object)"/>
-    public int UpdateAll(IEnumerable objects) {
-        int counter = 0;
-        RunInTransaction(() => {
-            foreach (object obj in objects) {
-                counter += Update(obj);
-            }
-        });
-        return counter;
-    }
-
-    /// <summary>
-    /// Deletes the object with the specified primary key.
-    /// </summary>
-    /// <returns>
-    /// The number of objects deleted.
-    /// </returns>
-    public int Delete(object primaryKey, SqliteTable map) {
-        SqliteColumn primaryKeyColumn = map.PrimaryKey
-            ?? throw new NotSupportedException($"Can't delete in table '{map.TableName}' since it has no primary key");
-        string query = $"delete from {map.TableName.SqlQuote()} where {primaryKeyColumn.Name.SqlQuote()} = ?";
-        int rowCount = Execute(query, primaryKey);
-        return rowCount;
-    }
-    /// <inheritdoc cref="Delete(object, SqliteTable)"/>
-    public int Delete<T>(object primaryKey) {
-        return Delete(primaryKey, MapTable<T>());
-    }
-    /// <summary>
-    /// Deletes the given object from the database using its primary key.
-    /// </summary>
-    /// <param name="objectToDelete">
-    /// The object to delete. It must have a primary key designated with <see cref="PrimaryKeyAttribute"/>.
-    /// </param>
-    /// <returns>
-    /// The number of rows deleted.
-    /// </returns>
-    public int Delete(object objectToDelete) {
-        SqliteTable map = MapTable(objectToDelete.GetType());
-        return Delete(map.PrimaryKey?.GetValue(objectToDelete)!, map);
-    }
-    /// <inheritdoc cref="Delete(object)"/>
-    public int DeleteAll(IEnumerable objects) {
-        int counter = 0;
-        RunInTransaction(() => {
-            foreach (object obj in objects) {
-                counter += Delete(obj);
-            }
-        });
-        return counter;
-    }
-
-    /// <summary>
-    /// Deletes every object from the specified table.<br/>
-    /// Be careful using this.
-    /// </summary>
-    /// <returns>
-    /// The number of objects deleted.
-    /// </returns>
-    public int DeleteAll(SqliteTable map) {
-        string query = $"delete from {map.TableName.SqlQuote()}";
-        int rowCount = Execute(query);
-        return rowCount;
-    }
-    /// <inheritdoc cref="DeleteAll(SqliteTable)"/>
-    public int DeleteAll<T>() {
-        return DeleteAll(MapTable<T>());
+    /// <inheritdoc cref="RunInTransaction(Action)"/>
+    public Task RunInTransactionAsync(Action action) {
+        return Task.Run(() => RunInTransaction(action));
     }
 
     /// <summary>
     /// Saves a backup of the entire database to the specified path.
     /// </summary>
-    public void Backup(string destinationDatabasePath, string databaseName = "main") {
-        // Open the destination
-        Result result = SqliteRaw.Open(destinationDatabasePath, out Sqlite3DatabaseHandle destHandle, OpenFlags.Recommended, null);
+    public void Backup(string destinationPath, string databaseName = "main") {
+        // Create a database at the destination
+        Result result = SqliteRaw.Open(destinationPath, out Sqlite3DatabaseHandle destHandle, OpenFlags.Recommended, null);
         if (result is not Result.OK) {
             throw new SqliteException(result, "Failed to open destination database");
         }
 
-        // Init the backup
+        // Initialize the backup
         Sqlite3BackupHandle backupHandle = SqliteRaw.BackupInit(destHandle, databaseName, Handle, databaseName);
         if (backupHandle is null) {
             SqliteRaw.Close(destHandle);
             throw new Exception("Failed to create backup");
         }
 
-        // Perform it
+        // Run the backup
         SqliteRaw.BackupStep(backupHandle, -1);
         SqliteRaw.BackupFinish(backupHandle);
 
@@ -517,175 +361,15 @@ public partial class SqliteConnection : IDisposable {
             errorMessage = SqliteRaw.GetErrorMessage(destHandle);
         }
 
-        // Close everything and report errors
+        // Close the backup database
         SqliteRaw.Close(destHandle);
+        // Report errors
         if (result is not Result.OK) {
             throw new SqliteException(result, errorMessage);
         }
     }
-
-    /// <inheritdoc cref="EnableLoadExtension(bool)"/>
-    public Task EnableLoadExtensionAsync(bool enabled) {
-        return Task.Run(() => EnableLoadExtension(enabled));
-    }
-    /// <inheritdoc cref="MapTable(Type)"/>
-    public Task<SqliteTable> GetMappingAsync(Type type) {
-        return Task.Run(() => MapTable(type));
-    }
-    /// <inheritdoc cref="GetMappingAsync()"/>
-    public Task<SqliteTable> GetMappingAsync<T>() where T : new() {
-        return Task.Run(() => MapTable<T>());
-    }
-    /// <inheritdoc cref="GetTable(Type, string?)"/>
-    public Task<bool> CreateTableAsync(Type type, string? virtualModuleName = null) {
-        return Task.Run(() => GetTable(type, virtualModuleName));
-    }
-    /// <inheritdoc cref="CreateTable{T}(string?)"/>
-    public Task<bool> CreateTableAsync<T>(string? virtualModuleName = null) where T : new() {
-        return Task.Run(() => CreateTable<T>(virtualModuleName));
-    }
-    /// <inheritdoc cref="CreateTables(IEnumerable{Type})"/>
-    public Task<Dictionary<Type, bool>> CreateTablesAsync(IEnumerable<Type> types) {
-        return Task.Run(() => CreateTables(types));
-    }
-    /// <inheritdoc cref="DropTable{T}()"/>
-    public Task<int> DropTableAsync<T>() where T : new() {
-        return Task.Run(() => DropTable<T>());
-    }
-    /// <inheritdoc cref="DropTable(SqliteTable)"/>
-    public Task<int> DropTableAsync(SqliteTable map) {
-        return Task.Run(() => DropTable(map));
-    }
-    /// <inheritdoc cref="GetTableInfo(string)"/>
-    public Task<IEnumerable<ColumnInfo>> GetTableInfoAsync(string tableName) {
-        return Task.Run(() => GetTableInfo(tableName));
-    }
-    /// <inheritdoc cref="CreateIndex(string, string, IEnumerable{string}, bool)"/>
-    public Task CreateIndexAsync(string indexName, string tableName, IEnumerable<string> columnNames, bool unique = false) {
-        return Task.Run(() => CreateIndex(indexName, tableName, columnNames, unique));
-    }
-    /// <inheritdoc cref="CreateIndex(string, IEnumerable{string}, bool)"/>
-    public Task CreateIndexAsync(string tableName, IEnumerable<string> columnNames, bool unique = false) {
-        return Task.Run(() => CreateIndex(tableName, columnNames, unique));
-    }
-    /// <inheritdoc cref="CreateIndex{T}(Expression{Func{T, object}}, bool)"/>
-    public Task CreateIndexAsync<T>(Expression<Func<T, object>> property, bool unique = false) {
-        return Task.Run(() => CreateIndex(property, unique));
-    }
-    /// <inheritdoc cref="Insert(object, string?)"/>
-    public Task<int> InsertAsync(object obj, string? modifier = null) {
-        return Task.Run(() => Insert(obj, modifier));
-    }
-    /// <inheritdoc cref="InsertAll(IEnumerable, string?)"/>
-    public Task<int> InsertAllAsync(IEnumerable objects, string? modifier = null) {
-        return Task.Run(() => InsertAll(objects, modifier));
-    }
-    /// <inheritdoc cref="InsertOrReplace(object)"/>
-    public Task<int> InsertOrReplaceAsync(object obj) {
-        return Task.Run(() => InsertOrReplace(obj));
-    }
-    /// <inheritdoc cref="InsertOrReplaceAll(IEnumerable)"/>
-    public Task<int> InsertOrReplaceAllAsync(IEnumerable objects) {
-        return Task.Run(() => InsertOrReplaceAll(objects));
-    }
-    /// <inheritdoc cref="InsertOrIgnore(object)"/>
-    public Task<int> InsertOrIgnoreAsync(object obj) {
-        return Task.Run(() => InsertOrIgnore(obj));
-    }
-    /// <inheritdoc cref="InsertOrIgnoreAll(IEnumerable)"/>
-    public Task<int> InsertOrIgnoreAllAsync(IEnumerable objects) {
-        return Task.Run(() => InsertOrIgnoreAll(objects));
-    }
-    /// <inheritdoc cref="Update(object)"/>
-    public Task<int> UpdateAsync(object obj) {
-        return Task.Run(() => Update(obj));
-    }
-    /// <inheritdoc cref="UpdateAll(IEnumerable)"/>
-    public Task<int> UpdateAllAsync(IEnumerable objects) {
-        return Task.Run(() => UpdateAll(objects));
-    }
-    /// <inheritdoc cref="Delete(object, SqliteTable)"/>
-    public Task<int> DeleteAsync(object primaryKey, SqliteTable map) {
-        return Task.Run(() => Delete(primaryKey, map));
-    }
-    /// <inheritdoc cref="Delete{T}(object)"/>
-    public Task<int> DeleteAsync<T>(object primaryKey) {
-        return Task.Run(() => Delete<T>(primaryKey));
-    }
-    /// <inheritdoc cref="Delete(object)"/>
-    public Task<int> DeleteAsync(object objectToDelete) {
-        return Task.Run(() => Delete(objectToDelete));
-    }
-    /// <inheritdoc cref="DeleteAll(SqliteTable)"/>
-    public Task<int> DeleteAllAsync(SqliteTable map) {
-        return Task.Run(() => DeleteAll(map));
-    }
-    /// <inheritdoc cref="DeleteAll{T}()"/>
-    public Task<int> DeleteAllAsync<T>() {
-        return Task.Run(() => DeleteAll<T>());
-    }
     /// <inheritdoc cref="Backup(string, string)"/>
     public Task BackupAsync(string destinationDatabasePath, string databaseName = "main") {
         return Task.Run(() => Backup(destinationDatabasePath, databaseName));
-    }
-    /// <inheritdoc cref="Get(object, SqliteTable)"/>
-    public Task<object> GetAsync(object pk, SqliteTable map) {
-        return Task.Run(() => Get(pk, map));
-    }
-    /// <inheritdoc cref="Get{T}(object)"/>
-    public Task<T> GetAsync<T>(object primaryKey) where T : new() {
-        return Task.Run(() => Get<T>(primaryKey));
-    }
-    /// <inheritdoc cref="Get{T}(Expression{Func{T, bool}})"/>
-    public Task<T> GetAsync<T>(Expression<Func<T, bool>> predicate) where T : new() {
-        return Task.Run(() => Get<T>(predicate));
-    }
-    /// <inheritdoc cref="Find(object, SqliteTable)"/>
-    public Task<object?> FindAsync(object pk, SqliteTable map) {
-        return Task.Run(() => Find(pk, map));
-    }
-    /// <inheritdoc cref="Find(object)"/>
-    public Task<T?> FindAsync<T>(object pk) where T : new() {
-        return Task.Run(() => Find<T>(pk));
-    }
-    /// <inheritdoc cref="Find{T}(Expression{Func{T, bool}})"/>
-    public Task<T?> FindAsync<T>(Expression<Func<T, bool>> predicate) where T : new() {
-        return Task.Run(() => Find(predicate));
-    }
-    /// <inheritdoc cref="FindWithQuery{T}(string, IEnumerable{object?})"/>
-    public Task<T?> FindWithQueryAsync<T>(string query, params IEnumerable<object?> parameters) where T : new() {
-        return Task.Run(() => FindWithQuery<T>(query, parameters));
-    }
-    /// <inheritdoc cref="FindWithQuery(SqliteTable, string, IEnumerable{object?})"/>
-    public Task<object?> FindWithQueryAsync(SqliteTable map, string query, params IEnumerable<object?> parameters) {
-        return Task.Run(() => FindWithQuery(map, query, parameters));
-    }
-    /// <inheritdoc cref="Execute(string, IEnumerable{object?})"/>
-    public Task<int> ExecuteAsync(string query, params IEnumerable<object?> parameters) {
-        return Task.Run(() => Execute(query, parameters));
-    }
-    /// <inheritdoc cref="RunInTransaction(Action)"/>
-    public Task RunInTransactionAsync(Action action) {
-        return Task.Run(() => RunInTransaction(action));
-    }
-    /// <inheritdoc cref="ExecuteScalar{T}(string, IEnumerable{object?})"/>
-    public Task<T> ExecuteScalarAsync<T>(string query, params IEnumerable<object?> parameters) {
-        return Task.Run(() => ExecuteScalar<T>(query, parameters));
-    }
-    /// <inheritdoc cref="Query(SqliteTable, string, IEnumerable{object?})"/>
-    public Task<IEnumerable<object>> QueryAsync(SqliteTable map, string query, params IEnumerable<object?> parameters) {
-        return Task.Run(() => Query(map, query, parameters));
-    }
-    /// <inheritdoc cref="Query{T}(string, IEnumerable{object?})"/>
-    public Task<IEnumerable<T>> QueryAsync<T>(string query, params IEnumerable<object?> parameters) where T : new() {
-        return Task.Run(() => Query<T>(query, parameters));
-    }
-    /// <inheritdoc cref="QueryScalars{T}(string, IEnumerable{object?})"/>
-    public Task<List<T>> QueryScalarsAsync<T>(string query, params IEnumerable<object?> parameters) {
-        return Task.Run(() => QueryScalars<T>(query, parameters));
-    }
-    /// <inheritdoc cref="ChangeKey(byte[])"/>
-    public Task ChangeKeyAsync(byte[] key) {
-        return Task.Run(() => ChangeKey(key));
     }
 }

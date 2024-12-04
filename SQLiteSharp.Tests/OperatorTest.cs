@@ -7,7 +7,7 @@ public class OperatorTest {
         using SqliteConnection Connection = new(":memory:");
 
         // Create a table for a class
-        Connection.GetTable<ShopItem>();
+        SqliteTable<ShopItem> ShopItems = Connection.GetTable<ShopItem>("ShopItems");
 
         // Insert items into the table
         Connection.Insert(new ShopItem() {
@@ -16,7 +16,7 @@ public class OperatorTest {
         });
 
         // Find one item in the table matching a predicate
-        ShopItem? item = Connection.Find<ShopItem>(ShopItem => ShopItem.Count == (ShopItem.Count * 2 - ShopItem.Count));
-        Assert.NotNull(item);
+        ShopItem? Item = ShopItems.FindOne(ShopItem => ShopItem.Count == (ShopItem.Count * 2 - ShopItem.Count));
+        Assert.NotNull(Item);
     }
 }

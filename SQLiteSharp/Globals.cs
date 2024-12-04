@@ -32,4 +32,7 @@ public static class Globals {
             return null;
         }
     }
+    public static Type AsNotNullable(this Type Type) {
+        return Nullable.GetUnderlyingType(Type) ?? Type;
+    }
 }

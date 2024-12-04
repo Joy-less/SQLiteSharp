@@ -92,7 +92,7 @@ public static class SqliteRaw {
             _ => throw new NotImplementedException()
         };
     }
-    public static Result EnableLoadExtension(Sqlite3DatabaseHandle db, int onoff) {
+    public static Result SetExtensionLoadingEnabled(Sqlite3DatabaseHandle db, int onoff) {
         return (Result)Sqlite3.sqlite3_enable_load_extension(db, onoff);
     }
     public static int LibVersionNumber() {
@@ -116,11 +116,11 @@ public static class SqliteRaw {
     public static Result BackupFinish(Sqlite3BackupHandle backup) {
         return (Result)Sqlite3.sqlite3_backup_finish(backup);
     }
-    public static Result SetKey(Sqlite3DatabaseHandle handle, ReadOnlySpan<byte> key, string name = "main") {
-        return (Result)Sqlite3.sqlite3_key_v2(handle, utf8z.FromString(name), key);
+    public static Result SetKey(Sqlite3DatabaseHandle handle, ReadOnlySpan<byte> key, string dbName = "main") {
+        return (Result)Sqlite3.sqlite3_key_v2(handle, utf8z.FromString(dbName), key);
     }
-    public static Result ChangeKey(Sqlite3DatabaseHandle handle, ReadOnlySpan<byte> key, string name = "main") {
-        return (Result)Sqlite3.sqlite3_rekey_v2(handle, utf8z.FromString(name), key);
+    public static Result ChangeKey(Sqlite3DatabaseHandle handle, ReadOnlySpan<byte> key, string dbName = "main") {
+        return (Result)Sqlite3.sqlite3_rekey_v2(handle, utf8z.FromString(dbName), key);
     }
 }
 

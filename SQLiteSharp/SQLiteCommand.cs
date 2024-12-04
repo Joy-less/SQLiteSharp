@@ -11,27 +11,25 @@ public class SqliteCommand(SqliteConnection connection) {
         return $"{CommandText} [{string.Join(", ", Parameters)}]";
     }
 
-    public int ExecuteNonQuery() {
+    public int Execute() {
         Sqlite3Statement statement = Prepare();
         Result result = SqliteRaw.Step(statement);
         SqliteRaw.Finalize(statement);
 
-        switch (result) {
-            case Result.Done:
-                int rowCount = SqliteRaw.Changes(Connection.Handle);
-                return rowCount;
-            case Result.Constraint when SqliteRaw.GetExtendedErrorCode(Connection.Handle) is ExtendedResult.ConstraintNotNull:
-                throw new NotNullConstraintViolationException(result, SqliteRaw.GetErrorMessage(Connection.Handle));
-            default:
-                throw new SqliteException(result, SqliteRaw.GetErrorMessage(Connection.Handle));
+        if (result is Result.Done) {
+            int rowCount = SqliteRaw.Changes(Connection.Handle);
+            return rowCount;
+        }
+        else {
+            throw new SqliteException(result, SqliteRaw.GetErrorMessage(Connection.Handle));
         }
     }
-    public IEnumerable<T> ExecuteQuery<T>(SqliteTable<T> table) where T : new() {
+    public IEnumerable<T> Query<T>(SqliteTable<T> table) where T : notnull, new() {
         Sqlite3Statement statement = Prepare();
         try {
             while (SqliteRaw.Step(statement) is Result.Row) {
-                // Create object to map
-                T obj = new();
+                // Create row object
+                T row = new();
 
                 // Iterate through found columns
                 int columnCount = SqliteRaw.GetColumnCount(statement);
@@ -46,56 +44,33 @@ public class SqliteCommand(SqliteConnection connection) {
 
                     // Read value from found column
                     object? value = ReadColumn(statement, i, column.ClrType);
-                    column.SetValue(obj, value);
+                    column.SetValue(row, value);
                 }
 
-                // Return mapped object
-                OnInstanceCreated?.Invoke(obj);
-                yield return obj;
+                // Return row object
+                OnInstanceCreated?.Invoke(row);
+                yield return row;
             }
         }
         finally {
             SqliteRaw.Finalize(statement);
         }
     }
-    public T ExecuteScalar<T>() {
-        T Value = default!;
-
+    public IEnumerable<T> QueryScalars<T>() {
         Sqlite3Statement statement = Prepare();
-
         try {
-            Result result = SqliteRaw.Step(statement);
-            if (result is Result.Row) {
-                object? columnValue = ReadColumn(statement, 0, typeof(T));
-                if (columnValue is not null) {
-                    Value = (T)columnValue;
+            while (true) {
+                Result result = SqliteRaw.Step(statement);
+
+                if (result is Result.Row) {
+                    object? value = ReadColumn(statement, 0, typeof(T));
+                    yield return value is not null ? (T)value : default!;
                 }
-            }
-            else if (result is Result.Done) {
-            }
-            else {
-                throw new SqliteException(result, SqliteRaw.GetErrorMessage(Connection.Handle));
-            }
-        }
-        finally {
-            SqliteRaw.Finalize(statement);
-        }
-
-        return Value;
-    }
-    public IEnumerable<T> ExecuteQueryScalars<T>() {
-        Sqlite3Statement statement = Prepare();
-        try {
-            if (SqliteRaw.GetColumnCount(statement) < 1) {
-                throw new InvalidOperationException("QueryScalars should return at least one column");
-            }
-            while (SqliteRaw.Step(statement) is Result.Row) {
-                object? value = ReadColumn(statement, 0, typeof(T));
-                if (value is null) {
-                    yield return default!;
+                else if (result is Result.Done) {
+                    break;
                 }
                 else {
-                    yield return (T)value;
+                    throw new SqliteException(result, SqliteRaw.GetErrorMessage(Connection.Handle));
                 }
             }
         }

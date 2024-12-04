@@ -29,7 +29,7 @@ public class Orm {
     }
     public TypeSerializer GetTypeSerializer(Type type) {
         // Get non-nullable type (int? -> int)
-        type = AsUnderlyingType(type);
+        type = type.AsNotNullable();
         // Try get serializer for exact type
         if (TypeSerializers.TryGetValue(type, out TypeSerializer mapper)) {
             return mapper;
@@ -65,33 +65,6 @@ public class Orm {
         }
 
         return declaration;
-    }
-    public static TableAttribute? GetTableAttribute(Type type) {
-        return type.GetCustomAttribute<TableAttribute>();
-    }
-    public static IEnumerable<MemberInfo> GetPropertiesAndFields() {
-
-    }
-    public static bool IsPrimaryKey(MemberInfo memberInfo) {
-        return memberInfo.GetCustomAttribute<PrimaryKeyAttribute>() is not null;
-    }
-    public static bool IsAutoIncrement(MemberInfo memberInfo) {
-        return memberInfo.GetCustomAttribute<AutoIncrementAttribute>() is not null;
-    }
-    public static bool IsNotNullConstrained(MemberInfo memberInfo) {
-        return memberInfo.GetCustomAttribute<NotNullAttribute>() is not null;
-    }
-    public static string? GetCollation(MemberInfo memberInfo) {
-        return memberInfo.GetCustomAttribute<CollationAttribute>()?.Value;
-    }
-    public static string? GetCheck(MemberInfo memberInfo) {
-        return memberInfo.GetCustomAttribute<CheckAttribute>()?.Value;
-    }
-    public static IEnumerable<IndexedAttribute> GetIndexes(MemberInfo memberInfo) {
-        return memberInfo.GetCustomAttributes<IndexedAttribute>();
-    }
-    public static Type AsUnderlyingType(Type Type) {
-        return Nullable.GetUnderlyingType(Type) ?? Type;
     }
 
     private void AddDefaultTypeSerializers() {

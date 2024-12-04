@@ -22,52 +22,60 @@ public class SqliteColumn {
 
         Name = member.GetCustomAttribute<ColumnAttribute>()?.Name ?? member.Name;
 
-        Collation = Orm.GetCollation(member);
+        Collation = member.GetCustomAttribute<CollationAttribute>()?.Value;
 
-        Check = Orm.GetCheck(member);
+        Check = member.GetCustomAttribute<CheckAttribute>()?.Value;
 
-        IsPrimaryKey = Orm.IsPrimaryKey(member) || Connection.Orm.IsImplicitPrimaryKey(member);
+        IsPrimaryKey = member.GetCustomAttribute<PrimaryKeyAttribute>() is not null
+            || Connection.Orm.IsImplicitPrimaryKey(member);
 
-        IsAutoIncrement = Orm.IsAutoIncrement(member) || (IsPrimaryKey && Connection.Orm.IsImplicitAutoIncrementedPrimaryKey(member));
+        IsAutoIncrement = member.GetCustomAttribute<AutoIncrementAttribute>() is not null
+            || (IsPrimaryKey && Connection.Orm.IsImplicitAutoIncrementedPrimaryKey(member));
 
-        Indexes = Orm.GetIndexes(member).ToArray();
+        Indexes = [.. member.GetCustomAttributes<IndexedAttribute>()];
         if (Indexes.Length == 0 && !IsPrimaryKey && Connection.Orm.IsImplicitIndex(member)) {
             Indexes = [new IndexedAttribute()];
         }
 
-        IsNotNull = IsPrimaryKey || Orm.IsNotNullConstrained(member);
+        IsNotNull = member.GetCustomAttribute<NotNullAttribute>() is not null
+            || IsPrimaryKey;
     }
 
-    public void SetValue(object obj, object? value) {
+    public void SetValue(object row, object? value) {
         switch (ClrMember) {
             case PropertyInfo propertyInfo:
-                propertyInfo.SetValue(obj, value);
+                propertyInfo.SetValue(row, value);
                 break;
             case FieldInfo fieldInfo:
-                fieldInfo.SetValue(obj, value);
+                fieldInfo.SetValue(row, value);
                 break;
             default:
                 throw new InvalidProgramException();
         }
     }
-    public void SetSqliteValue(object obj, SqliteValue sqliteValue) {
+    public void SetSqliteValue(object row, SqliteValue sqliteValue) {
         TypeSerializer typeSerializer = Connection.Orm.GetTypeSerializer(ClrType);
         object? value = typeSerializer.Deserialize(sqliteValue, ClrType);
-        SetValue(obj, value);
+        SetValue(row, value);
     }
-    public object? GetValue(object obj) {
+    public object? GetValue(object row) {
         return ClrMember switch {
-            PropertyInfo propertyInfo => propertyInfo.GetValue(obj),
-            FieldInfo fieldInfo => fieldInfo.GetValue(obj),
+            PropertyInfo propertyInfo => propertyInfo.GetValue(row),
+            FieldInfo fieldInfo => fieldInfo.GetValue(row),
             _ => throw new InvalidProgramException(),
         };
+    }
+    public SqliteValue GetSqliteValue(object row) {
+        object? value = GetValue(row);
+        TypeSerializer typeSerializer = Connection.Orm.GetTypeSerializer(ClrType);
+        return typeSerializer.Serialize(row);
     }
 
     private static Type GetMemberType(MemberInfo memberInfo) {
         return memberInfo switch {
             PropertyInfo propertyInfo => propertyInfo.PropertyType,
             FieldInfo fieldInfo => fieldInfo.FieldType,
-            _ => throw new InvalidProgramException($"{nameof(SqliteColumn)} only supports properties and fields."),
+            _ => throw new InvalidProgramException("Member must be a property or a field."),
         };
     }
 }

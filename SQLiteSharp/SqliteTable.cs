@@ -1,9 +1,10 @@
-﻿using System.Linq.Expressions;
+﻿using System.Collections;
+using System.Linq.Expressions;
 using System.Reflection;
 
 namespace SQLiteSharp;
 
-public class SqliteTable<T> where T : new() {
+public class SqliteTable<T> where T : notnull, new() {
     public SqliteConnection Connection { get; }
     public string TableName { get; }
     public string? VirtualModule { get; }
@@ -12,7 +13,7 @@ public class SqliteTable<T> where T : new() {
     public SqliteColumn? PrimaryKey { get; }
     public bool HasAutoIncrementedPrimaryKey { get; }
 
-    internal SqliteTable(SqliteConnection connection, string? tableName = null, string? virtualModule = null) {
+    internal SqliteTable(SqliteConnection connection, string? tableName = null, string? virtualModule = null, bool createTable = true) {
         TableAttribute? tableAttribute = typeof(T).GetCustomAttribute<TableAttribute>();
 
         Connection = connection;
@@ -21,17 +22,18 @@ public class SqliteTable<T> where T : new() {
         WithoutRowId = tableAttribute?.WithoutRowId ?? false;
 
         (Columns, PrimaryKey) = GetColumnsFromMembers();
-        CreateOrMigrateTable();
-        CreateIndexes();
+
+        if (createTable) {
+            CreateOrMigrateTable();
+            CreateIndexes();
+        }
     }
 
-    public string GetByPrimaryKeySql {
-        get {
-            if (PrimaryKey is null) {
-                throw new InvalidOperationException("Cannot get by primary key because table has no primary key");
-            }
-            return $"select * from {TableName.SqlQuote()} where {PrimaryKey.Name.SqlQuote()} = ?";
+    public string GetFindByPrimaryKeySql() {
+        if (PrimaryKey is null) {
+            throw new InvalidOperationException("Cannot get by primary key because table has no primary key");
         }
+        return $"select * from {TableName.SqlQuote()} where {PrimaryKey.Name.SqlQuote()} = ?";
     }
 
     /// <summary>
@@ -43,6 +45,10 @@ public class SqliteTable<T> where T : new() {
     public void DeleteTable() {
         string query = $"drop table if exists {TableName.SqlQuote()}";
         Connection.Execute(query);
+    }
+    /// <inheritdoc cref="DeleteTable()"/>
+    public Task DeleteTableAsync() {
+        return Task.Run(DeleteTable);
     }
 
     /// <summary>
@@ -56,49 +62,325 @@ public class SqliteTable<T> where T : new() {
     /// The enumerator calls <c>sqlite3_step</c> on each call to MoveNext, so the database connection must remain open for the lifetime of the enumerator.
     /// </remarks>
     public IEnumerable<T> Query(string query, params IEnumerable<object?> parameters) {
-        return Connection.CreateCommand(query, parameters).ExecuteQuery(this);
+        return Connection.CreateCommand(query, parameters).Query(this);
     }
 
     /// <summary>
-    /// Retrieves an object with the primary key from the associated table.<br/>
+    /// Retrieves an row with the primary key.<br/>
     /// The table must have a designated primary key.
     /// </summary>
     /// <returns>
-    /// The object with the primary key, or <see langword="null"/> if the object is not found.
+    /// The row with the primary key, or <see langword="null"/> if the row is not found.
     /// </returns>
-    public object? Find(object primaryKey) {
-        return Query(GetByPrimaryKeySql, primaryKey).FirstOrDefault();
+    public T? FindByKey(object primaryKey) {
+        return Query(GetFindByPrimaryKeySql(), primaryKey).FirstOrDefault();
     }
+    /// <inheritdoc cref="FindByKey(object)"/>
+    public Task<T?> FindByKeyAsync(object primaryKey) {
+        return Task.Run(() => FindByKey(primaryKey));
+    }
+
     /// <summary>
-    /// Retrieves the first object matching the predicate from the associated table.
+    /// Retrieves the first row matching the predicate.
     /// </summary>
     /// <returns>
-    /// The first object matching the predicate, or <see langword="null"/> if no objects match the predicate.
+    /// The first row matching the predicate, or <see langword="null"/> if no rows match the predicate.
     /// </returns>
-    public T? Find<T>(Expression<Func<T, bool>> predicate) where T : new() {
+    public T? FindOne(Expression<Func<T, bool>> predicate) {
         return Table<T>().Where(predicate).FirstOrDefault();
     }
+    /// <inheritdoc cref="FindOne(Expression{Func{T, bool}})"/>
+    public Task<T?> FindOneAsync(Expression<Func<T, bool>> predicate) {
+        return Task.Run(() => FindOne(predicate));
+    }
+
     /// <summary>
-    /// Retrieves the first object matching the SQL query from the associated table.
+    /// Retrieves the first row matching the SQL query from the associated table.
     /// </summary>
     /// <returns>
-    /// The first object matching the query, or <see langword="null"/> if no objects match the predicate.
+    /// The first row matching the query, or <see langword="null"/> if no rows match the query.
     /// </returns>
-    public object? FindWithQuery(string query, params IEnumerable<object?> parameters) {
+    public T? FindOneByQuery(string query, params IEnumerable<object?> parameters) {
         return Query(query, parameters).FirstOrDefault();
+    }
+    /// <inheritdoc cref="FindOneByQuery(string, IEnumerable{object?})"/>
+    public Task<T?> FindOneByQueryAsync(string query, params IEnumerable<object?> parameters) {
+        return Task.Run(() => FindOneByQuery(query, parameters));
+    }
+
+    /// <summary>
+    /// Inserts the row into the table, updating any auto-incremented primary keys.<br/>
+    /// The <paramref name="modifier"/> is literal SQL added after <c>INSERT</c> (e.g. <c>OR REPLACE</c>).
+    /// </summary>
+    /// <returns>The number of rows added.</returns>
+    public int InsertOne(T row, string? modifier = null) {
+        SqliteColumn[] columns = Columns;
+        // Strip auto-incremented columns (unless "OR REPLACE"/"OR IGNORE")
+        if (string.IsNullOrEmpty(modifier)) {
+            columns = [.. columns.Where(column => !column.IsAutoIncrement)];
+        }
+
+        // Get column values for object (row)
+        IEnumerable<object?> values = columns.Select(column => column.GetValue(row));
+
+        string query;
+        if (columns.Length == 0) {
+            query = $"insert {modifier} into {TableName.SqlQuote()} default values";
+        }
+        else {
+            string columnsSql = string.Join(",", columns.Select(column => column.Name.SqlQuote()));
+            string valuesSql = string.Join(",", columns.Select(column => "?"));
+            query = $"insert {modifier} into {TableName.SqlQuote()}({columnsSql}) values ({valuesSql})";
+        }
+
+        int rowCount = Connection.Execute(query, values);
+
+        if (HasAutoIncrementedPrimaryKey) {
+            long rowId = SqliteRaw.GetLastInsertRowId(Connection.Handle);
+            PrimaryKey?.SetSqliteValue(row, rowId);
+        }
+
+        return rowCount;
+    }
+    /// <inheritdoc cref="InsertOne(T, string?)"/>
+    public Task<int> InsertOneAsync(T row, string? modifier = null) {
+        return Task.Run(() => InsertOne(row, modifier));
+    }
+
+    /// <summary>
+    /// Inserts each row into the table, updating any auto-incremented primary keys.<br/>
+    /// The <paramref name="modifier"/> is literal SQL added after <c>INSERT</c> (e.g. <c>OR REPLACE</c>).
+    /// </summary>
+    /// <returns>The number of rows added.</returns>
+    public int InsertAll(IEnumerable<T> rows, string? modifier = null) {
+        int counter = 0;
+        Connection.RunInTransaction(() => {
+            foreach (T row in rows) {
+                counter += InsertOne(row, modifier);
+            }
+        });
+        return counter;
+    }
+    /// <inheritdoc cref="InsertAll(IEnumerable{T}, string?)"/>
+    public Task<int> InsertAllAsync(IEnumerable<T> rows, string? modifier = null) {
+        return Task.Run(() => InsertAll(rows, modifier));
+    }
+
+    /// <summary>
+    /// Inserts the row into the table, updating any auto-incremented primary keys.<br/>
+    /// </summary>
+    /// <remarks>
+    /// If a UNIQUE constraint violation occurs, the old row is replaced.
+    /// </remarks>
+    /// <returns>The number of rows added/modified.</returns>
+    public int InsertOrReplace(T row) {
+        return InsertOne(row, "OR REPLACE");
+    }
+    /// <inheritdoc cref="InsertOrReplace(T)"/>
+    public Task<int> InsertOrReplaceAsync(T row) {
+        return Task.Run(() => InsertOrReplace(row));
+    }
+
+    /// <summary>
+    /// Inserts each row into the table, updating any auto-incremented primary keys.<br/>
+    /// </summary>
+    /// <remarks>
+    /// If a UNIQUE constraint violation occurs, the old row is replaced.
+    /// </remarks>
+    /// <returns>The number of rows added/modified.</returns>
+    public int InsertOrReplaceAll(IEnumerable<T> rows) {
+        int counter = 0;
+        Connection.RunInTransaction(() => {
+            foreach (T row in rows) {
+                counter += InsertOrReplace(row);
+            }
+        });
+        return counter;
+    }
+    /// <inheritdoc cref="InsertOrReplaceAll(IEnumerable{T})"/>
+    public Task<int> InsertOrReplaceAllAsync(IEnumerable<T> rows) {
+        return Task.Run(() => InsertOrReplaceAll(rows));
+    }
+
+    /// <summary>
+    /// Inserts the row into the table, updating any auto-incremented primary keys.<br/>
+    /// </summary>
+    /// <remarks>
+    /// If a UNIQUE constraint violation occurs, the new row is not inserted.
+    /// </remarks>
+    /// <returns>The number of rows modified.</returns>
+    public int InsertOrIgnore(T row) {
+        return InsertOne(row, "OR IGNORE");
+    }
+    /// <inheritdoc cref="InsertOrIgnore(T)"/>
+    public Task<int> InsertOrIgnoreAsync(T row) {
+        return Task.Run(() => InsertOrIgnore(row));
+    }
+
+    /// <summary>
+    /// Inserts each row into the table, updating any auto-incremented primary keys.<br/>
+    /// </summary>
+    /// <remarks>
+    /// If a UNIQUE constraint violation occurs, the new row is not inserted.
+    /// </remarks>
+    /// <returns>The number of rows added/modified.</returns>
+    public int InsertOrIgnoreAll(IEnumerable<T> rows) {
+        int counter = 0;
+        Connection.RunInTransaction(() => {
+            foreach (T row in rows) {
+                counter += InsertOrIgnore(row);
+            }
+        });
+        return counter;
+    }
+    /// <inheritdoc cref="InsertOrIgnoreAll(IEnumerable{T})"/>
+    public Task<int> InsertOrIgnoreAllAsync(IEnumerable<T> rows) {
+        return Task.Run(() => InsertOrIgnoreAll(rows));
+    }
+
+    /// <summary>
+    /// Updates every column of a table using the specified row except for its primary key.
+    /// </summary>
+    /// <remarks>
+    /// The table must have a designated primary key.
+    /// </remarks>
+    /// <returns>
+    /// The number of rows updated.
+    /// </returns>
+    public int UpdateOne(T row) {
+        // Get primary key column
+        SqliteColumn primaryKey = PrimaryKey
+            ?? throw new NotSupportedException($"Can't update in table '{TableName}' since it has no annotated primary key");
+
+        // Get column and values to update
+        IEnumerable<SqliteColumn> columns = Columns.Where(column => column != primaryKey);
+        IEnumerable<object?> values = columns.Select(column => column.GetValue(row));
+
+        // Ensure at least one column will be updated
+        if (!columns.Any()) {
+            return 0;
+        }
+
+        // Build update SQL with parameters
+        List<object?> parameters = [.. values, primaryKey.GetValue(row)];
+        string columnsSql = string.Join(",", columns.Select(column => $"{column.Name.SqlQuote()} = ?"));
+        string query = $"update {TableName.SqlQuote()} set {columnsSql} where {primaryKey.Name.SqlQuote()} = ?";
+
+        // Execute update
+        int rowCount = Connection.Execute(query, parameters);
+        return rowCount;
+    }
+    /// <inheritdoc cref="UpdateOne(T)"/>
+    public Task<int> UpdateOneAsync(T row) {
+        return Task.Run(() => UpdateOne(row));
+    }
+
+    /// <summary>
+    /// Updates every column of a table using the specified rows except for their primary key.
+    /// </summary>
+    /// <remarks>
+    /// The table must have a designated primary key.
+    /// </remarks>
+    /// <returns>
+    /// The number of rows updated.
+    /// </returns>
+    public int UpdateAll(IEnumerable<T> rows) {
+        int counter = 0;
+        Connection.RunInTransaction(() => {
+            foreach (T row in rows) {
+                counter += UpdateOne(row);
+            }
+        });
+        return counter;
+    }
+    /// <inheritdoc cref="UpdateAll(IEnumerable{T})"/>
+    public Task<int> UpdateAllAsync(IEnumerable<T> rows) {
+        return Task.Run(() => UpdateAll(rows));
+    }
+
+    /// <summary>
+    /// Deletes the row with the specified primary key.
+    /// </summary>
+    /// <returns>
+    /// The number of rows deleted.
+    /// </returns>
+    public int DeleteByKey(object primaryKey) {
+        // Get primary key column
+        SqliteColumn primaryKeyColumn = PrimaryKey
+            ?? throw new NotSupportedException($"Can't delete in table '{TableName}' since it has no annotated primary key");
+
+        // Build delete SQL
+        string query = $"delete from {TableName.SqlQuote()} where {primaryKeyColumn.Name.SqlQuote()} = ?";
+
+        // Execute delete
+        int rowCount = Connection.Execute(query, primaryKey);
+        return rowCount;
+    }
+    /// <inheritdoc cref="DeleteByKey(object)"/>
+    public Task<int> DeleteByKeyAsync(object primaryKey) {
+        return Task.Run(() => DeleteByKey(primaryKey));
+    }
+
+    /// <summary>
+    /// Deletes the rows with the specified primary key.
+    /// </summary>
+    /// <returns>
+    /// The number of rows deleted.
+    /// </returns>
+    public int DeleteAllByKey(IEnumerable primaryKeys) {
+        int counter = 0;
+        Connection.RunInTransaction(() => {
+            foreach (object primaryKey in primaryKeys) {
+                counter += DeleteByKey(primaryKey);
+            }
+        });
+        return counter;
+    }
+    /// <inheritdoc cref="DeleteAllByKey(IEnumerable)"/>
+    public Task<int> DeleteAllByKeyAsync(IEnumerable primaryKeys) {
+        return Task.Run(() => DeleteAllByKey(primaryKeys));
+    }
+
+    /// <summary>
+    /// Deletes every object from the specified table.
+    /// </summary>
+    /// <remarks>
+    /// This is non-recoverable.
+    /// </remarks>
+    /// <returns>
+    /// The number of rows deleted.
+    /// </returns>
+    public int DeleteAll() {
+        string query = $"delete from {TableName.SqlQuote()}";
+        int rowCount = Connection.Execute(query);
+        return rowCount;
+    }
+    /// <inheritdoc cref="DeleteAll()"/>
+    public Task<int> DeleteAllAsync() {
+        return Task.Run(DeleteAll);
     }
 
     /// <summary>
     /// Creates an index for the specified column(s), facilitating constant lookup times.
     /// </summary>
-    public void CreateIndex(string indexName, string tableName, IEnumerable<string> columnNames, bool unique = false) {
-        string sql = $"create {(unique ? "unique" : "")} index if not exists {indexName.SqlQuote()} on {tableName.SqlQuote()}({string.Join(", ", columnNames.Select(columnName => columnName.SqlQuote()))})";
+    public void CreateIndex(string indexName, IEnumerable<string> columnNames, bool unique = false) {
+        string sql = $"create {(unique ? "unique" : "")} index if not exists {indexName.SqlQuote()} on {TableName.SqlQuote()}({string.Join(", ", columnNames.Select(columnName => columnName.SqlQuote()))})";
         Connection.Execute(sql);
     }
-    /// <inheritdoc cref="CreateIndex(string, string, IEnumerable{string}, bool)"/>
-    public void CreateIndex(string tableName, IEnumerable<string> columnNames, bool unique = false) {
-        CreateIndex($"{tableName}_{string.Join("_", columnNames)}", tableName, columnNames, unique);
+    /// <inheritdoc cref="CreateIndex(string, IEnumerable{string}, bool)"/>
+    public Task CreateIndexAsync(string indexName, IEnumerable<string> columnNames, bool unique = false) {
+        return Task.Run(() => CreateIndex(indexName, columnNames, unique));
     }
+
+    /// <inheritdoc cref="CreateIndex(string, IEnumerable{string}, bool)"/>
+    public void CreateIndex(IEnumerable<string> columnNames, bool unique = false) {
+        CreateIndex($"{TableName}_{string.Join("_", columnNames)}", columnNames, unique);
+    }
+    /// <inheritdoc cref="CreateIndex(IEnumerable{string}, bool)"/>
+    public Task CreateIndexAsync(IEnumerable<string> columnNames, bool unique = false) {
+        return Task.Run(() => CreateIndex(columnNames, unique));
+    }
+
     /// <summary>
     /// Creates an index for the specified column(s), facilitating constant lookup times.<br/>
     /// For example:
@@ -129,8 +411,17 @@ public class SqliteTable<T> where T : new() {
         CreateIndex(TableName, columnNames, unique);
     }
     /// <inheritdoc cref="CreateIndex(IEnumerable{Expression{Func{T, object}}}, bool)"/>
+    public Task CreateIndexAsync(IEnumerable<Expression<Func<T, object>>> properties, bool unique = false) {
+        return Task.Run(() => CreateIndex(properties, unique));
+    }
+
+    /// <inheritdoc cref="CreateIndex(IEnumerable{Expression{Func{T, object}}}, bool)"/>
     public void CreateIndex(Expression<Func<T, object>> property, bool unique = false) {
         CreateIndex([property], unique);
+    }
+    /// <inheritdoc cref="CreateIndex(Expression{Func{T, object}}, bool)"/>
+    public Task CreateIndexAsync(Expression<Func<T, object>> property, bool unique = false) {
+        return Task.Run(() => CreateIndex(property, unique));
     }
 
     private (SqliteColumn[] Columns, SqliteColumn? PrimaryKey) GetColumnsFromMembers() {
@@ -149,11 +440,16 @@ public class SqliteTable<T> where T : new() {
             if (member.GetCustomAttribute<IgnoreAttribute>() is not null) {
                 continue;
             }
+
             // Add column from member
             SqliteColumn column = new(Connection, member);
             columns.Add(new SqliteColumn(Connection, member));
+
             // Set column as primary key
             if (column.IsPrimaryKey) {
+                if (primaryKey is not null) {
+                    throw new NotSupportedException("A table cannot have multiple annotated primary keys.");
+                }
                 primaryKey = column;
             }
         }
@@ -219,7 +515,7 @@ public class SqliteTable<T> where T : new() {
         }
         // Create column indexes
         foreach (IndexInfo index in indexes.Values) {
-            CreateIndex(index.IndexName, index.TableName, index.Columns, index.Unique);
+            CreateIndex(index.IndexName, index.Columns, index.Unique);
         }
     }
 }

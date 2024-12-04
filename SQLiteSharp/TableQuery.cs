@@ -50,7 +50,7 @@ public class TableQuery<T>(SqliteConnection connection, SqliteTable table) : IEn
         string commandText = $"delete from {Table.TableName.SqlQuote()} where {ExpressionToSql(deletePredicate, parameters).CommandText}";
         SqliteCommand command = Connection.CreateCommand(commandText, parameters);
 
-        int rowCount = command.ExecuteNonQuery();
+        int rowCount = command.Execute();
         return rowCount;
     }
 
