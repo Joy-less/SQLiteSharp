@@ -1,19 +1,21 @@
 ﻿namespace SQLiteSharp;
 
+
 [AttributeUsage(AttributeTargets.Class | AttributeTargets.Struct)]
 public class TableAttribute(string? name) : Attribute {
     public string? Name { get; set; } = name;
+}
 
-    /// <summary>
-    /// Whether to create the table without <c>rowid</c> (see <see href="https://sqlite.org/withoutrowid.html"/>).<br/>
-    /// The default is <see langword="false"/> so that SQLite adds an implicit <c>rowid</c> to every table created.
-    /// </summary>
-    public bool WithoutRowId { get; set; }
+/// <summary>
+/// The table will be created without an implicit <c>rowid</c> (see <see href="https://sqlite.org/withoutrowid.html"/>).<br/>
+/// </summary>
+[AttributeUsage(AttributeTargets.Class | AttributeTargets.Struct)]
+public class WithoutRowIdAttribute() : Attribute {
 }
 
 [AttributeUsage(AttributeTargets.Property | AttributeTargets.Field)]
-public class ColumnAttribute(string name) : Attribute {
-    public string Name { get; set; } = name;
+public class ColumnAttribute(string? name) : Attribute {
+    public string? Name { get; set; } = name;
 }
 
 [AttributeUsage(AttributeTargets.Property | AttributeTargets.Field)]

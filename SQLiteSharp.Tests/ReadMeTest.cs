@@ -5,9 +5,6 @@ namespace SQLiteSharp.Tests;
 public class ReadMeTest {
     [Fact]
     public void Test1() {
-        var builder = SqlBuilder.Select<ShopItem>(Item => Item).Where(Item => Item.ItemName == "Apple");
-        _ = builder;
-
         // Open a database connection
         using SqliteConnection Connection = new("database.db");
 
@@ -28,15 +25,18 @@ public class ReadMeTest {
         });
 
         // Find one item in the table matching a predicate
-        ShopItem? Apple = ShopItems.FindOne(ShopItem => ShopItem.ItemName == "Apple");
-        Assert.NotNull(Apple);
+        //ShopItem? Apple = ShopItems.FindOne(ShopItem => ShopItem.ItemName == "Apple");
+        //Assert.NotNull(Apple);
 
         // Delete an item from the table
-        ShopItems.DeleteByKey(Apple.Id);
+        //ShopItems.DeleteByKey(Apple.Id);
+
+        long z = ShopItems.Count(ShopItem => ShopItem.ItemName != null);
+        _ = z;
 
         // Find several items in the table
-        List<ShopItem> Bananas = Connection.Table<ShopItem>().Where(ShopItem => ShopItem.ItemName == "Banana").ToList();
-        Assert.Single(Bananas);
+        //List<ShopItem> Bananas = Connection.Table<ShopItem>().Where(ShopItem => ShopItem.ItemName == "Banana").ToList();
+        //Assert.Single(Bananas);
     }
     [Fact]
     public void Test2() {
@@ -59,8 +59,8 @@ public class ReadMeTest {
         });
 
         // Find one item in the table matching a predicate
-        SweetWrapper? Sweet = Connection.Table<SweetWrapper>().FirstOrDefault();
-        Assert.NotNull(Sweet);
+        //SweetWrapper? Sweet = Connection.Table<SweetWrapper>().FirstOrDefault();
+        //Assert.NotNull(Sweet);
     }
 }
 

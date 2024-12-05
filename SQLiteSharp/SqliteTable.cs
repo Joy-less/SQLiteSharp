@@ -1,4 +1,5 @@
-﻿using System.Collections;
+﻿using DotNetBrightener.LinQToSqlBuilder;
+using System.Collections;
 using System.Linq.Expressions;
 using System.Reflection;
 
@@ -15,11 +16,12 @@ public class SqliteTable<T> where T : notnull, new() {
 
     internal SqliteTable(SqliteConnection connection, string? tableName = null, string? virtualModule = null, bool createTable = true) {
         TableAttribute? tableAttribute = typeof(T).GetCustomAttribute<TableAttribute>();
+        WithoutRowIdAttribute? withoutRowIdAttribute = typeof(T).GetCustomAttribute<WithoutRowIdAttribute>();
 
         Connection = connection;
         TableName = tableName ?? tableAttribute?.Name ?? typeof(T).Name;
         VirtualModule = virtualModule;
-        WithoutRowId = tableAttribute?.WithoutRowId ?? false;
+        WithoutRowId = withoutRowIdAttribute is not null;
 
         (Columns, PrimaryKey) = GetColumnsFromMembers();
 
@@ -51,6 +53,19 @@ public class SqliteTable<T> where T : notnull, new() {
         return Task.Run(DeleteTable);
     }
 
+    public long Count(Expression<Func<T, bool>>? predicate = null) {
+        SqlBuilder<T> builder = SqlBuilder.Count(predicate);
+        return Connection.ExecuteQueryScalars<long>(builder.CommandText, builder.CommandParameters).First();
+    }
+
+    /// <summary>
+    /// Builds a complex query using <see cref="DotNetBrightener.LinQToSqlBuilder"/>.<br/>
+    /// The query can be executed using <see cref="ExecuteQuery(SqlBuilder{T})"/>.
+    /// </summary>
+    public SqlBuilder<T> Query() {
+        return new SqlBuilder<T>();
+    }
+
     /// <summary>
     /// Creates and executes a <see cref="SqliteCommand"/> query.<br/>
     /// Use this method to retrieve rows.
@@ -59,10 +74,32 @@ public class SqliteTable<T> where T : notnull, new() {
     /// The rows returned by the query.
     /// </returns>
     /// <remarks>
-    /// The enumerator calls <c>sqlite3_step</c> on each call to MoveNext, so the database connection must remain open for the lifetime of the enumerator.
+    /// The <see cref="SqliteConnection"/> must remain open for the lifetime of the enumerator.
     /// </remarks>
     public IEnumerable<T> ExecuteQuery(string query, params IEnumerable<object?> parameters) {
         return Connection.CreateCommand(query, parameters).ExecuteQuery(this);
+    }
+    /// <inheritdoc cref="ExecuteQuery(string, IEnumerable{object?})"/>
+    public IAsyncEnumerable<T> ExecuteQueryAsync(string query, params IEnumerable<object?> parameters) {
+        return ExecuteQuery(query, parameters).ToAsyncEnumerable();
+    }
+
+    /// <inheritdoc cref="ExecuteQuery(string, IEnumerable{object?})"/>
+    public IEnumerable<T> ExecuteQuery(string query, IDictionary<string, object?> parameters) {
+        return Connection.CreateCommand(query, parameters).ExecuteQuery(this);
+    }
+    /// <inheritdoc cref="ExecuteQuery(string, IEnumerable{object?})"/>
+    public IAsyncEnumerable<T> ExecuteQueryAsync(string query, IDictionary<string, object?> parameters) {
+        return ExecuteQuery(query, parameters).ToAsyncEnumerable();
+    }
+
+    /// <inheritdoc cref="ExecuteQuery(string, IEnumerable{object?})"/>
+    public IEnumerable<T> ExecuteQuery(SqlBuilder<T> sqlBuilder) {
+        return ExecuteQuery(sqlBuilder.CommandText, sqlBuilder.CommandParameters);
+    }
+    /// <inheritdoc cref="ExecuteQuery(string, IEnumerable{object?})"/>
+    public IAsyncEnumerable<T> ExecuteQueryAsync(SqlBuilder<T> sqlBuilder) {
+        return ExecuteQuery(sqlBuilder).ToAsyncEnumerable();
     }
 
     /// <summary>
@@ -87,14 +124,15 @@ public class SqliteTable<T> where T : notnull, new() {
     /// The first row matching the predicate, or <see langword="null"/> if no rows match the predicate.
     /// </returns>
     public T? FindOne(Expression<Func<T, bool>> predicate) {
-        return Table<T>().Where(predicate).FirstOrDefault();
+        return default; // TODO
+        //return Table<T>().Where(predicate).FirstOrDefault();
     }
     /// <inheritdoc cref="FindOne(Expression{Func{T, bool}})"/>
     public Task<T?> FindOneAsync(Expression<Func<T, bool>> predicate) {
         return Task.Run(() => FindOne(predicate));
     }
 
-    /// <summary>
+    /*/// <summary>
     /// Retrieves the first row matching the SQL query from the associated table.
     /// </summary>
     /// <returns>
@@ -106,7 +144,7 @@ public class SqliteTable<T> where T : notnull, new() {
     /// <inheritdoc cref="FindOneByQuery(string, IEnumerable{object?})"/>
     public Task<T?> FindOneByQueryAsync(string query, params IEnumerable<object?> parameters) {
         return Task.Run(() => FindOneByQuery(query, parameters));
-    }
+    }*/
 
     /// <summary>
     /// Inserts the row into the table, updating any auto-incremented primary keys.<br/>

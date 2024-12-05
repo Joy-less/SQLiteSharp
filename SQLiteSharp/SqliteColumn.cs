@@ -42,16 +42,7 @@ public class SqliteColumn {
     }
 
     public void SetValue(object row, object? value) {
-        switch (ClrMember) {
-            case PropertyInfo propertyInfo:
-                propertyInfo.SetValue(row, value);
-                break;
-            case FieldInfo fieldInfo:
-                fieldInfo.SetValue(row, value);
-                break;
-            default:
-                throw new InvalidProgramException();
-        }
+        ClrMember.SetValue(row, value);
     }
     public void SetSqliteValue(object row, SqliteValue sqliteValue) {
         TypeSerializer typeSerializer = Connection.Orm.GetTypeSerializer(ClrType);
@@ -59,11 +50,7 @@ public class SqliteColumn {
         SetValue(row, value);
     }
     public object? GetValue(object row) {
-        return ClrMember switch {
-            PropertyInfo propertyInfo => propertyInfo.GetValue(row),
-            FieldInfo fieldInfo => fieldInfo.GetValue(row),
-            _ => throw new InvalidProgramException(),
-        };
+        return ClrMember.GetValue(row);
     }
     public SqliteValue GetSqliteValue(object row) {
         object? value = GetValue(row);

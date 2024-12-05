@@ -1,4 +1,6 @@
-﻿namespace SQLiteSharp;
+﻿using DotNetBrightener.LinQToSqlBuilder;
+
+namespace SQLiteSharp;
 
 /// <summary>
 /// An open connection to a SQLite database.
@@ -167,7 +169,7 @@ public partial class SqliteConnection : IDisposable {
     /// Put <c>@</c> (or <c>:</c> / <c>$</c>) in the command text followed by an identifier for each argument.<br/>
     /// For example, <c>@name</c>, <c>:name</c> or <c>$name</c>.
     /// </summary>
-    public SqliteCommand CreateCommand(string commandText, Dictionary<string, object> parameters) {
+    public SqliteCommand CreateCommand(string commandText, IDictionary<string, object?> parameters) {
         SqliteCommand command = new(this) {
             CommandText = commandText,
             Parameters = parameters.Select(parameter => new SqliteCommandParameter(parameter.Key, parameter.Value)),
@@ -184,11 +186,20 @@ public partial class SqliteConnection : IDisposable {
     /// </returns>
     public int Execute(string query, params IEnumerable<object?> parameters) {
         SqliteCommand command = CreateCommand(query, parameters);
-        int rowCount = command.Execute();
-        return rowCount;
+        return command.Execute();
     }
     /// <inheritdoc cref="Execute(string, IEnumerable{object?})"/>
     public Task<int> ExecuteAsync(string query, params IEnumerable<object?> parameters) {
+        return Task.Run(() => Execute(query, parameters));
+    }
+
+    /// <inheritdoc cref="Execute(string, IEnumerable{object?})"/>
+    public int Execute(string query, IDictionary<string, object?> parameters) {
+        SqliteCommand command = CreateCommand(query, parameters);
+        return command.Execute();
+    }
+    /// <inheritdoc cref="Execute(string, IDictionary{string, object?})"/>
+    public Task<int> ExecuteAsync(string query, IDictionary<string, object?> parameters) {
         return Task.Run(() => Execute(query, parameters));
     }
 
@@ -199,38 +210,23 @@ public partial class SqliteConnection : IDisposable {
     /// <returns>
     /// The first column of each row returned by the query.
     /// </returns>
-    public IEnumerable<T> QueryScalars<T>(string query, params IEnumerable<object?> parameters) {
+    public IEnumerable<T> ExecuteQueryScalars<T>(string query, params IEnumerable<object?> parameters) {
         SqliteCommand command = CreateCommand(query, parameters);
         return command.ExecuteQueryScalars<T>();
     }
-    /// <inheritdoc cref="QueryScalars{T}(string, IEnumerable{object?})"/>
-    public Task<IEnumerable<T>> QueryScalarsAsync<T>(string query, params IEnumerable<object?> parameters) {
-        return Task.Run(() => QueryScalars<T>(query, parameters));
+    /// <inheritdoc cref="ExecuteQueryScalars{T}(string, IEnumerable{object?})"/>
+    public Task<IEnumerable<T>> ExecuteQueryScalarsAsync<T>(string query, params IEnumerable<object?> parameters) {
+        return Task.Run(() => ExecuteQueryScalars<T>(query, parameters));
     }
 
-    /// <summary>
-    /// Creates a <see cref="SqliteCommand"/> and executes a single scalar query.<br/>
-    /// Use this method to retrieve a single primitive value.
-    /// </summary>
-    /// <returns>
-    /// The first column of the first row returned by the query.
-    /// </returns>
-    public T QueryScalar<T>(string query, params IEnumerable<object?> parameters) {
-        return QueryScalars<T>(query, parameters).First();
+    /// <inheritdoc cref="ExecuteQueryScalars{T}(string, IEnumerable{object?})"/>
+    public IEnumerable<T> ExecuteQueryScalars<T>(string query, IDictionary<string, object?> parameters) {
+        SqliteCommand command = CreateCommand(query, parameters);
+        return command.ExecuteQueryScalars<T>();
     }
-    /// <inheritdoc cref="QueryScalar{T}(string, IEnumerable{object?})"/>
-    public Task<T> QueryScalarAsync<T>(string query, params IEnumerable<object?> parameters) {
-        return Task.Run(() => QueryScalar<T>(query, parameters));
-    }
-
-    /// <summary>
-    /// Creates a queryable interface to the table associated with the given type.
-    /// </summary>
-    /// <returns>
-    /// A queryable object that can perform <c>Where</c>, <c>OrderBy</c>, <c>Count</c>, <c>Take</c> and <c>Skip</c> queries on the table.
-    /// </returns>
-    public TableQuery<T> Table<T>() where T : new() {
-        return new TableQuery<T>(this);
+    /// <inheritdoc cref="ExecuteQueryScalars{T}(string, IDictionary{string, object?})"/>
+    public Task<IEnumerable<T>> ExecuteQueryScalarsAsync<T>(string query, IDictionary<string, object?> parameters) {
+        return Task.Run(() => ExecuteQueryScalars<T>(query, parameters));
     }
 
     /// <summary>
