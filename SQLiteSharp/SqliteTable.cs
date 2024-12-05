@@ -1,5 +1,4 @@
-﻿using DotNetBrightener.LinQToSqlBuilder;
-using System.Collections;
+﻿using System.Collections;
 using System.Linq.Expressions;
 using System.Reflection;
 
@@ -7,19 +6,19 @@ namespace SQLiteSharp;
 
 public class SqliteTable<T> where T : notnull, new() {
     public SqliteConnection Connection { get; }
-    public string TableName { get; }
+    public string Name { get; }
     public string? VirtualModule { get; }
     public bool WithoutRowId { get; }
     public SqliteColumn[] Columns { get; }
     public SqliteColumn? PrimaryKey { get; }
     public bool HasAutoIncrementedPrimaryKey { get; }
 
-    internal SqliteTable(SqliteConnection connection, string? tableName = null, string? virtualModule = null, bool createTable = true) {
+    internal SqliteTable(SqliteConnection connection, string? name = null, string? virtualModule = null, bool createTable = true) {
         TableAttribute? tableAttribute = typeof(T).GetCustomAttribute<TableAttribute>();
         WithoutRowIdAttribute? withoutRowIdAttribute = typeof(T).GetCustomAttribute<WithoutRowIdAttribute>();
 
         Connection = connection;
-        TableName = tableName ?? tableAttribute?.Name ?? typeof(T).Name;
+        Name = name ?? tableAttribute?.Name ?? typeof(T).Name;
         VirtualModule = virtualModule;
         WithoutRowId = withoutRowIdAttribute is not null;
 
@@ -35,7 +34,7 @@ public class SqliteTable<T> where T : notnull, new() {
         if (PrimaryKey is null) {
             throw new InvalidOperationException("Cannot get by primary key because table has no primary key");
         }
-        return $"select * from {TableName.SqlQuote()} where {PrimaryKey.Name.SqlQuote()} = ?";
+        return $"select * from {Name.SqlQuote()} where {PrimaryKey.Name.SqlQuote()} = ?";
     }
 
     /// <summary>
@@ -45,7 +44,7 @@ public class SqliteTable<T> where T : notnull, new() {
     /// This is non-recoverable.
     /// </remarks>
     public void DeleteTable() {
-        string query = $"drop table if exists {TableName.SqlQuote()}";
+        string query = $"drop table if exists {Name.SqlQuote()}";
         Connection.Execute(query);
     }
     /// <inheritdoc cref="DeleteTable()"/>
@@ -54,16 +53,16 @@ public class SqliteTable<T> where T : notnull, new() {
     }
 
     public long Count(Expression<Func<T, bool>>? predicate = null) {
-        SqlBuilder<T> builder = SqlBuilder.Count(predicate);
-        return Connection.ExecuteQueryScalars<long>(builder.CommandText, builder.CommandParameters).First();
+        SqlBuilder2<T> builder = SqlBuilder.Count(predicate);
+        return Connection.ExecuteQueryScalars<long>(builder.CommandText, builder.Parameters).First();
     }
 
     /// <summary>
     /// Builds a complex query using <see cref="DotNetBrightener.LinQToSqlBuilder"/>.<br/>
     /// The query can be executed using <see cref="ExecuteQuery(SqlBuilder{T})"/>.
     /// </summary>
-    public SqlBuilder<T> Query() {
-        return new SqlBuilder<T>();
+    public SqlBuilder2<T> Query() {
+        return new SqlBuilder2<T>();
     }
 
     /// <summary>
@@ -148,8 +147,17 @@ public class SqliteTable<T> where T : notnull, new() {
 
     /// <summary>
     /// Inserts the row into the table, updating any auto-incremented primary keys.<br/>
-    /// The <paramref name="modifier"/> is literal SQL added after <c>INSERT</c> (e.g. <c>OR REPLACE</c>).
     /// </summary>
+    /// <param name="modifier">
+    /// Literal SQL added after <c>INSERT</c>:
+    /// <code>
+    /// OR REPLACE
+    /// OR IGNORE
+    /// OR ABORT
+    /// OR FAIL
+    /// OR ROLLBACK
+    /// </code>
+    /// </param>
     /// <returns>The number of rows added.</returns>
     public int Insert(T row, string? modifier = null) {
         SqliteColumn[] columns = Columns;
@@ -163,12 +171,12 @@ public class SqliteTable<T> where T : notnull, new() {
 
         string query;
         if (columns.Length == 0) {
-            query = $"insert {modifier} into {TableName.SqlQuote()} default values";
+            query = $"insert {modifier} into {Name.SqlQuote()} default values";
         }
         else {
             string columnsSql = string.Join(",", columns.Select(column => column.Name.SqlQuote()));
             string valuesSql = string.Join(",", columns.Select(column => "?"));
-            query = $"insert {modifier} into {TableName.SqlQuote()}({columnsSql}) values ({valuesSql})";
+            query = $"insert {modifier} into {Name.SqlQuote()}({columnsSql}) values ({valuesSql})";
         }
 
         int rowCount = Connection.Execute(query, values);
@@ -181,8 +189,8 @@ public class SqliteTable<T> where T : notnull, new() {
         return rowCount;
     }
     /// <inheritdoc cref="Insert(T, string?)"/>
-    public Task<int> InsertAsync(T row, string? modifier = null) {
-        return Task.Run(() => Insert(row, modifier));
+    public Task<int> InsertAsync(T row, string? orModifier = null) {
+        return Task.Run(() => Insert(row, orModifier));
     }
 
     /// <summary>
@@ -288,7 +296,7 @@ public class SqliteTable<T> where T : notnull, new() {
     public int UpdateOne(T row) {
         // Get primary key column
         SqliteColumn primaryKey = PrimaryKey
-            ?? throw new NotSupportedException($"Can't update in table '{TableName}' since it has no annotated primary key");
+            ?? throw new NotSupportedException($"Can't update in table '{Name}' since it has no annotated primary key");
 
         // Get column and values to update
         IEnumerable<SqliteColumn> columns = Columns.Where(column => column != primaryKey);
@@ -302,7 +310,7 @@ public class SqliteTable<T> where T : notnull, new() {
         // Build update SQL with parameters
         List<object?> parameters = [.. values, primaryKey.GetValue(row)];
         string columnsSql = string.Join(",", columns.Select(column => $"{column.Name.SqlQuote()} = ?"));
-        string query = $"update {TableName.SqlQuote()} set {columnsSql} where {primaryKey.Name.SqlQuote()} = ?";
+        string query = $"update {Name.SqlQuote()} set {columnsSql} where {primaryKey.Name.SqlQuote()} = ?";
 
         // Execute update
         int rowCount = Connection.Execute(query, parameters);
@@ -345,10 +353,10 @@ public class SqliteTable<T> where T : notnull, new() {
     public int DeleteByKey(object primaryKey) {
         // Get primary key column
         SqliteColumn primaryKeyColumn = PrimaryKey
-            ?? throw new NotSupportedException($"Can't delete in table '{TableName}' since it has no annotated primary key");
+            ?? throw new NotSupportedException($"Can't delete in table '{Name}' since it has no annotated primary key");
 
         // Build delete SQL
-        string query = $"delete from {TableName.SqlQuote()} where {primaryKeyColumn.Name.SqlQuote()} = ?";
+        string query = $"delete from {Name.SqlQuote()} where {primaryKeyColumn.Name.SqlQuote()} = ?";
 
         // Execute delete
         int rowCount = Connection.Execute(query, primaryKey);
@@ -389,7 +397,7 @@ public class SqliteTable<T> where T : notnull, new() {
     /// The number of rows deleted.
     /// </returns>
     public int DeleteAll() {
-        string query = $"delete from {TableName.SqlQuote()}";
+        string query = $"delete from {Name.SqlQuote()}";
         int rowCount = Connection.Execute(query);
         return rowCount;
     }
@@ -402,7 +410,7 @@ public class SqliteTable<T> where T : notnull, new() {
     /// Creates an index for the specified column(s), facilitating constant lookup times.
     /// </summary>
     public void CreateIndex(string indexName, IEnumerable<string> columnNames, bool unique = false) {
-        string sql = $"create {(unique ? "unique" : "")} index if not exists {indexName.SqlQuote()} on {TableName.SqlQuote()}({string.Join(", ", columnNames.Select(columnName => columnName.SqlQuote()))})";
+        string sql = $"create {(unique ? "unique" : "")} index if not exists {indexName.SqlQuote()} on {Name.SqlQuote()}({string.Join(", ", columnNames.Select(columnName => columnName.SqlQuote()))})";
         Connection.Execute(sql);
     }
     /// <inheritdoc cref="CreateIndex(string, IEnumerable{string}, bool)"/>
@@ -412,7 +420,7 @@ public class SqliteTable<T> where T : notnull, new() {
 
     /// <inheritdoc cref="CreateIndex(string, IEnumerable{string}, bool)"/>
     public void CreateIndex(IEnumerable<string> columnNames, bool unique = false) {
-        CreateIndex($"{TableName}_{string.Join("_", columnNames)}", columnNames, unique);
+        CreateIndex($"{Name}_{string.Join("_", columnNames)}", columnNames, unique);
     }
     /// <inheritdoc cref="CreateIndex(IEnumerable{string}, bool)"/>
     public Task CreateIndexAsync(IEnumerable<string> columnNames, bool unique = false) {
@@ -446,7 +454,7 @@ public class SqliteTable<T> where T : notnull, new() {
         }
 
         // Create index for columns
-        CreateIndex(TableName, columnNames, unique);
+        CreateIndex(Name, columnNames, unique);
     }
     /// <inheritdoc cref="CreateIndex(IEnumerable{Expression{Func{T, object}}}, bool)"/>
     public Task CreateIndexAsync(IEnumerable<Expression<Func<T, object>>> properties, bool unique = false) {
@@ -460,6 +468,13 @@ public class SqliteTable<T> where T : notnull, new() {
     /// <inheritdoc cref="CreateIndex(Expression{Func{T, object}}, bool)"/>
     public Task CreateIndexAsync(Expression<Func<T, object>> property, bool unique = false) {
         return Task.Run(() => CreateIndex(property, unique));
+    }
+
+    public string MemberNameToColumnName(string memberName) {
+        return Columns.First(column => column.ClrMember.Name == memberName).Name;
+    }
+    public string ColumnNameToMemberName(string columnName) {
+        return Columns.First(column => column.Name == columnName).ClrMember.Name;
     }
 
     private (SqliteColumn[] Columns, SqliteColumn? PrimaryKey) GetColumnsFromMembers() {
@@ -495,10 +510,10 @@ public class SqliteTable<T> where T : notnull, new() {
     }
     private void CreateOrMigrateTable() {
         // Check if the table already exists
-        List<ColumnInfo> existingColumns = Connection.GetTableInfo(TableName).ToList();
+        List<ColumnInfo> existingColumns = Connection.GetTableInfo(Name).ToList();
 
         // Create new table
-        if (Connection.TableExists(TableName)) {
+        if (Connection.TableExists(Name)) {
             // Add virtual table modifiers
             string virtualModifier = VirtualModule is not null ? "virtual" : "";
             string usingModifier = VirtualModule is not null ? $"using {VirtualModule.SqlQuote()}" : "";
@@ -510,7 +525,7 @@ public class SqliteTable<T> where T : notnull, new() {
             string withoutRowIdModifier = WithoutRowId ? "without rowid" : "";
 
             // Build query
-            string query = $"create {virtualModifier} table if not exists {TableName.SqlQuote()} {usingModifier} ({columnDeclarations}) {withoutRowIdModifier}";
+            string query = $"create {virtualModifier} table if not exists {Name.SqlQuote()} {usingModifier} ({columnDeclarations}) {withoutRowIdModifier}";
             // Execute query
             Connection.Execute(query);
         }
@@ -521,7 +536,7 @@ public class SqliteTable<T> where T : notnull, new() {
             ).ToList();
 
             foreach (SqliteColumn column in newColumns) {
-                string sql = $"alter table {TableName.SqlQuote()} add column {Connection.Orm.GetSqlDeclaration(column)}";
+                string sql = $"alter table {Name.SqlQuote()} add column {Connection.Orm.GetSqlDeclaration(column)}";
                 Connection.Execute(sql);
             }
         }
@@ -532,12 +547,12 @@ public class SqliteTable<T> where T : notnull, new() {
         foreach (SqliteColumn column in Columns) {
             foreach (IndexAttribute index in column.Indexes) {
                 // Choose name for index
-                string indexName = index.Name ?? $"{TableName}_{column.Name}";
+                string indexName = index.Name ?? $"{Name}_{column.Name}";
                 // Find index from another column
                 if (!indexes.TryGetValue(indexName, out IndexInfo indexInfo)) {
                     indexInfo = new IndexInfo() {
                         IndexName = indexName,
-                        TableName = TableName,
+                        TableName = Name,
                         Unique = index.Unique,
                         Columns = [],
                     };

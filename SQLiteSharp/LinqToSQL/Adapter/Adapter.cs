@@ -7,7 +7,7 @@ internal static class Adapter {
         }
         return $"SELECT {selection} FROM {source} {conditions} {order} OFFSET {pageSize * pageIndex} ROWS FETCH NEXT {pageSize} ROWS ONLY";
     }
-    public static string Table(string tableName) {
+    /*public static string Table(string tableName) {
         return $"[{tableName}]";
     }
     public static  string Field(string fieldName) {
@@ -18,7 +18,7 @@ internal static class Adapter {
     }
     public static string Parameter(string parameterId) {
         return "@" + parameterId;
-    }
+    }*/
     public static string QueryString(string selection, string source, string conditions, string order = "", string grouping = "", string having = "") {
         return $"SELECT {selection} FROM {source} {conditions} {order} {grouping} {having}".Trim();
     }
