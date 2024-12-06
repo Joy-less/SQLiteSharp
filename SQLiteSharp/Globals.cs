@@ -66,4 +66,12 @@ public static class Globals {
             return Expression.Lambda(expression).Compile().DynamicInvoke();
         }
     }
+    public static bool IsConstantNull(this Expression? expression) {
+        if (expression is ConstantExpression constantExpression) {
+            return constantExpression.Value is null;
+        }
+        else {
+            return false;
+        }
+    }
 }

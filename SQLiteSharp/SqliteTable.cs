@@ -4,7 +4,10 @@ using System.Reflection;
 
 namespace SQLiteSharp;
 
-public class SqliteTable<T> where T : notnull, new() {
+/*public abstract class SqliteTable {
+
+}*/
+public class SqliteTable<T> /*: SqliteTable*/ where T : notnull, new() {
     public SqliteConnection Connection { get; }
     public string Name { get; }
     public string? VirtualModule { get; }
@@ -53,8 +56,16 @@ public class SqliteTable<T> where T : notnull, new() {
     }
 
     public long Count(Expression<Func<T, bool>>? predicate = null) {
-        SqlBuilder2<T> builder = SqlBuilder.Count(predicate);
-        return Connection.ExecuteQueryScalars<long>(builder.CommandText, builder.Parameters).First();
+        SqlBuilder2<T> query = Query().Select(SelectType.Count);
+        if (predicate is not null) {
+            query.Where(predicate);
+        }
+        string x = query.GetCommand();
+        _ = x;
+        return query.ExecuteQueryScalars<long>().First();
+    }
+    public Task<long> CountAsync(Expression<Func<T, bool>>? predicate = null) {
+        return Task.Run(() => Count(predicate));
     }
 
     /// <summary>
@@ -62,7 +73,7 @@ public class SqliteTable<T> where T : notnull, new() {
     /// The query can be executed using <see cref="ExecuteQuery(SqlBuilder{T})"/>.
     /// </summary>
     public SqlBuilder2<T> Query() {
-        return new SqlBuilder2<T>();
+        return new SqlBuilder2<T>(this);
     }
 
     /// <summary>
@@ -90,15 +101,6 @@ public class SqliteTable<T> where T : notnull, new() {
     /// <inheritdoc cref="ExecuteQuery(string, IEnumerable{object?})"/>
     public IAsyncEnumerable<T> ExecuteQueryAsync(string query, IDictionary<string, object?> parameters) {
         return ExecuteQuery(query, parameters).ToAsyncEnumerable();
-    }
-
-    /// <inheritdoc cref="ExecuteQuery(string, IEnumerable{object?})"/>
-    public IEnumerable<T> ExecuteQuery(SqlBuilder<T> sqlBuilder) {
-        return ExecuteQuery(sqlBuilder.CommandText, sqlBuilder.CommandParameters);
-    }
-    /// <inheritdoc cref="ExecuteQuery(string, IEnumerable{object?})"/>
-    public IAsyncEnumerable<T> ExecuteQueryAsync(SqlBuilder<T> sqlBuilder) {
-        return ExecuteQuery(sqlBuilder).ToAsyncEnumerable();
     }
 
     /// <summary>

@@ -1,6 +1,4 @@
-﻿using DotNetBrightener.LinQToSqlBuilder;
-
-namespace SQLiteSharp;
+﻿namespace SQLiteSharp;
 
 /// <summary>
 /// An open connection to a SQLite database.
@@ -204,8 +202,8 @@ public partial class SqliteConnection : IDisposable {
     }
 
     /// <summary>
-    /// Creates a <see cref="SqliteCommand"/> and executes a multiple scalar query.<br/>
-    /// Use this method retrieve multiple primitive values.
+    /// Creates a <see cref="SqliteCommand"/> and executes a scalar query.<br/>
+    /// Use this method retrieve primitive values.
     /// </summary>
     /// <returns>
     /// The first column of each row returned by the query.

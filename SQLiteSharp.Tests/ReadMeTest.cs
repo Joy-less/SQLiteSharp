@@ -1,6 +1,4 @@
-﻿using DotNetBrightener.LinQToSqlBuilder;
-
-namespace SQLiteSharp.Tests;
+﻿namespace SQLiteSharp.Tests;
 
 public class ReadMeTest {
     [Fact]
