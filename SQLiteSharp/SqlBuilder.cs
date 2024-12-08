@@ -272,21 +272,25 @@ public class SqlBuilder<T> where T : notnull, new() {
             case ConstantExpression constantExpression:
                 return AddParameter(constantExpression.Value);
 
+            // Default (null)
+            case DefaultExpression defaultExpression:
+                return AddParameter(defaultExpression.Execute());
+
             // Unary (!a)
             case UnaryExpression unaryExpression:
-                return $"{OperatorToSql(unaryExpression.NodeType)} {ExpressionToSql(unaryExpression.Operand, rowExpression)}";
+                return $"({OperatorToSql(unaryExpression.NodeType)} {ExpressionToSql(unaryExpression.Operand, rowExpression)})";
 
             // Binary (a == b)
             case BinaryExpression binaryExpression:
                 if (TryConvertEqualsNullToIsNull(binaryExpression, rowExpression, out string? isNullSql)) {
                     return isNullSql;
                 }
-                return $"{ExpressionToSql(binaryExpression.Left, rowExpression)} {OperatorToSql(binaryExpression.NodeType)} {ExpressionToSql(binaryExpression.Right, rowExpression)}";
+                return $"({ExpressionToSql(binaryExpression.Left, rowExpression)} {OperatorToSql(binaryExpression.NodeType)} {ExpressionToSql(binaryExpression.Right, rowExpression)})";
 
             // Method Call (a.b())
             case MethodCallExpression methodCallExpression:
                 if (TryConvertMethodCallToSql(methodCallExpression, out string? methodSql)) {
-                    return methodSql;
+                    return $"({methodSql})";
                 }
                 // Executing the method will fail if it references the row parameter.
                 return AddParameter(methodCallExpression.Execute());
@@ -294,10 +298,6 @@ public class SqlBuilder<T> where T : notnull, new() {
             // Condition (a ? b : c)
             case ConditionalExpression conditionalExpression:
                 return $"iif({ExpressionToSql(conditionalExpression.Test, rowExpression)}, {ExpressionToSql(conditionalExpression.IfTrue, rowExpression)}, {ExpressionToSql(conditionalExpression.IfFalse, rowExpression)})";
-
-            // Default (null)
-            case DefaultExpression defaultExpression:
-                return AddParameter(defaultExpression.Execute());
 
             // Member
             case MemberExpression memberExpression:
@@ -313,7 +313,7 @@ public class SqlBuilder<T> where T : notnull, new() {
         }
     }
     /// <summary>
-    /// Convert (a == null) to "a is null" because "null = null" is false.
+    /// Converts (a == null) to "a is null" because "null = null" is false.
     /// </summary>
     private bool TryConvertEqualsNullToIsNull(BinaryExpression binaryExpression, ParameterExpression rowExpression, [NotNullWhen(true)] out string? result) {
         result = null;
@@ -389,6 +389,73 @@ public class SqlBuilder<T> where T : notnull, new() {
             StringComparison strComparison = (StringComparison)methodCall.Arguments[1].Execute()!;
 
             return $"{AddParameter(str1)} = {AddParameter(str2)} collate {StringComparisonToCollation(strComparison).SqlQuote()}";
+        });
+
+        // string.Contains(string)
+        MethodToSqlConverters.Add(typeof(string).GetMethod(nameof(string.Contains), [typeof(string)])!, methodCall => {
+            string? str1 = (string?)methodCall.Object.Execute();
+            string? str2 = (string?)methodCall.Arguments[0].Execute();
+
+            return $"{AddParameter(str1)} like {AddParameter("%" + str2 + "%")} escape '\\'";
+        });
+
+        // string.StartsWith(string)
+        MethodToSqlConverters.Add(typeof(string).GetMethod(nameof(string.StartsWith), [typeof(string)])!, methodCall => {
+            string? str1 = (string?)methodCall.Object.Execute();
+            string? str2 = (string?)methodCall.Arguments[0].Execute();
+
+            return $"{AddParameter(str1)} like {AddParameter(str2 + "%")} escape '\\'";
+        });
+
+        // string.EndsWith(string)
+        MethodToSqlConverters.Add(typeof(string).GetMethod(nameof(string.StartsWith), [typeof(string)])!, methodCall => {
+            string? str1 = (string?)methodCall.Object.Execute();
+            string? str2 = (string?)methodCall.Arguments[0].Execute();
+
+            return $"{AddParameter(str1)} like {AddParameter("%" + str2)} escape '\\'";
+        });
+
+        // string.ToLower()
+        MethodToSqlConverters.Add(typeof(string).GetMethod(nameof(string.ToLower), [])!, methodCall => {
+            string? str = (string?)methodCall.Object.Execute();
+
+            return $"lower({AddParameter(str)})";
+        });
+
+        // string.ToUpper()
+        MethodToSqlConverters.Add(typeof(string).GetMethod(nameof(string.ToUpper), [])!, methodCall => {
+            string? str = (string?)methodCall.Object.Execute();
+
+            return $"upper({AddParameter(str)})";
+        });
+
+        // string.IsNullOrEmpty(string)
+        MethodToSqlConverters.Add(typeof(string).GetMethod(nameof(string.IsNullOrEmpty), [])!, methodCall => {
+            string? str = (string?)methodCall.Object.Execute();
+            string parameter = AddParameter(str);
+
+            return $"({parameter} is null or {parameter} = '')";
+        });
+
+        // string.Trim()
+        MethodToSqlConverters.Add(typeof(string).GetMethod(nameof(string.Trim), [])!, methodCall => {
+            string? str = (string?)methodCall.Object.Execute();
+
+            return $"trim({AddParameter(str)})";
+        });
+
+        // string.TrimStart()
+        MethodToSqlConverters.Add(typeof(string).GetMethod(nameof(string.TrimStart), [])!, methodCall => {
+            string? str = (string?)methodCall.Object.Execute();
+
+            return $"ltrim({AddParameter(str)})";
+        });
+
+        // string.TrimEnd()
+        MethodToSqlConverters.Add(typeof(string).GetMethod(nameof(string.TrimEnd), [])!, methodCall => {
+            string? str = (string?)methodCall.Object.Execute();
+
+            return $"rtrim({AddParameter(str)})";
         });
     }
 }
