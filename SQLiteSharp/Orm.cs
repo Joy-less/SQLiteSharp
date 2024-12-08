@@ -31,14 +31,16 @@ public class Orm {
         // Get non-nullable type (int? -> int)
         type = type.AsNotNullable();
         // Try get serializer for exact type
-        if (TypeSerializers.TryGetValue(type, out TypeSerializer mapper)) {
-            return mapper;
+        if (TypeSerializers.TryGetValue(type, out TypeSerializer typeSerializer)) {
+            return typeSerializer;
         }
         // Try get fallback serializer for base type
-        foreach (TypeSerializer typeSerializer in TypeSerializers.Values) {
-            if (typeSerializer.ClrType == type) {
+        Type? fallbackType = type.BaseType;
+        while (fallbackType is not null) {
+            if (TypeSerializers.TryGetValue(fallbackType, out typeSerializer)) {
                 return typeSerializer;
             }
+            fallbackType = type.BaseType;
         }
         // Serializer not found
         throw new InvalidOperationException($"No {nameof(TypeSerializer)} found for '{type}'");
