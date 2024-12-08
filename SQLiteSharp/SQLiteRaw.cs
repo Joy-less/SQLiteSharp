@@ -1,4 +1,4 @@
-﻿using SQLitePCL;
+using SQLitePCL;
 
 namespace SQLiteSharp;
 

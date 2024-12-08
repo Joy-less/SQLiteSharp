@@ -1,4 +1,4 @@
-﻿namespace SQLiteSharp;
+namespace SQLiteSharp;
 
 /// <summary>
 /// Settings for opening a <see cref="SqliteConnection"/>.

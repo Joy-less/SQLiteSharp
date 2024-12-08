@@ -1,4 +1,4 @@
-﻿namespace SQLiteSharp;
+namespace SQLiteSharp;
 
 
 [AttributeUsage(AttributeTargets.Class | AttributeTargets.Struct)]

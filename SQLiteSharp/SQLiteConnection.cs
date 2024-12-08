@@ -1,4 +1,4 @@
-﻿namespace SQLiteSharp;
+namespace SQLiteSharp;
 
 /// <summary>
 /// An open connection to a SQLite database.

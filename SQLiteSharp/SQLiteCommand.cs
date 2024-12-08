@@ -1,4 +1,4 @@
-﻿namespace SQLiteSharp;
+namespace SQLiteSharp;
 
 public class SqliteCommand(SqliteConnection connection) {
     public SqliteConnection Connection { get; } = connection;

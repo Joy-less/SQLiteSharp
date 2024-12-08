@@ -1,4 +1,4 @@
-﻿namespace SQLiteSharp;
+namespace SQLiteSharp;
 
 public static class CollationType {
     /// <summary>

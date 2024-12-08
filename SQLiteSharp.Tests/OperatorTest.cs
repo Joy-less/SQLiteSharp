@@ -1,4 +1,4 @@
-﻿namespace SQLiteSharp.Tests;
+namespace SQLiteSharp.Tests;
 
 public class OperatorTest {
     [Fact]

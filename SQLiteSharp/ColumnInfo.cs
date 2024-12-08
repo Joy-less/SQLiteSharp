@@ -1,4 +1,4 @@
-﻿namespace SQLiteSharp;
+namespace SQLiteSharp;
 
 public record ColumnInfo {
     [Column("cid")] public int ColumnId { get; set; }
