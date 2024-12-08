@@ -9,7 +9,7 @@ public static class SqliteRaw {
     public static Result Close(Sqlite3DatabaseHandle db) {
         return (Result)Sqlite3.sqlite3_close_v2(db);
     }
-    public static Result BusyTimeout(Sqlite3DatabaseHandle db, int milliseconds) {
+    public static Result SetBusyTimeout(Sqlite3DatabaseHandle db, int milliseconds) {
         return (Result)Sqlite3.sqlite3_busy_timeout(db, milliseconds);
     }
     public static int Changes(Sqlite3DatabaseHandle db) {
@@ -95,7 +95,7 @@ public static class SqliteRaw {
     public static Result SetExtensionLoadingEnabled(Sqlite3DatabaseHandle db, int onoff) {
         return (Result)Sqlite3.sqlite3_enable_load_extension(db, onoff);
     }
-    public static int LibVersionNumber() {
+    public static int GetLibraryVersionNumber() {
         return Sqlite3.sqlite3_libversion_number();
     }
     public static Result GetResult(Sqlite3DatabaseHandle db) {
@@ -121,6 +121,9 @@ public static class SqliteRaw {
     }
     public static Result ChangeKey(Sqlite3DatabaseHandle handle, ReadOnlySpan<byte> key, string dbName = "main") {
         return (Result)Sqlite3.sqlite3_rekey_v2(handle, utf8z.FromString(dbName), key);
+    }
+    public static Result CreateCollation(Sqlite3DatabaseHandle handle, string name, Func<string, string, int> callback) {
+        return (Result)Sqlite3.sqlite3_create_collation(handle, name, null, (object userData, string str1, string str2) => callback(str1, str2));
     }
 }
 

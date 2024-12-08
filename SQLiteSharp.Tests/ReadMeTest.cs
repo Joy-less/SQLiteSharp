@@ -23,8 +23,12 @@ public class ReadMeTest {
         });
 
         // Find one item in the table matching a predicate
-        //ShopItem? Apple = ShopItems.FindOne(ShopItem => ShopItem.ItemName == "Apple");
-        //Assert.NotNull(Apple);
+        ShopItem? Apple = ShopItems.FindOne(ShopItem => ShopItem.ItemName == "Apple");
+        Assert.NotNull(Apple);
+
+        ShopItem? Apple = ShopItems.Build().Select().WhereEquals(ShopItem => ShopItem.ItemName, "Apple").Find();
+
+        ShopItem? Apple = ShopItems.Build().WhereEquals(ShopItem => ShopItem.ItemName, "Apple").ExecuteQuery();
 
         // Delete an item from the table
         //ShopItems.DeleteByKey(Apple.Id);

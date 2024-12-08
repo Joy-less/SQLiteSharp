@@ -4,7 +4,7 @@ namespace SQLiteSharp;
 /// An open connection to a SQLite database.
 /// </summary>
 public partial class SqliteConnection : IDisposable {
-    public Orm Orm { get; } = new();
+    public Orm Orm { get; }
     public Sqlite3DatabaseHandle Handle { get; }
 
     /// <summary>
@@ -24,19 +24,25 @@ public partial class SqliteConnection : IDisposable {
     /// </summary>
     public SqliteConnection(SqliteConnectionOptions options) {
         Options = options;
+        Orm = Options.Orm ?? new Orm();
 
+        // Try to open database
         Result openResult = SqliteRaw.Open(options.DatabasePath, out Sqlite3DatabaseHandle handle, options.OpenFlags, null);
-        Handle = handle;
-
         if (openResult is not Result.OK) {
             throw new SqliteException(openResult, $"Could not open database file {Options.DatabasePath.SqlQuote()}: {openResult}");
         }
+        Handle = handle;
 
+        // Set initial operation busy timeout
         BusyTimeout = TimeSpan.FromSeconds(1.0);
 
+        // Use encryption key
         if (options.EncryptionKey is not null) {
             SqliteRaw.SetKey(Handle, options.EncryptionKey);
         }
+
+        // Create custom collations
+        CreateCollation("NOCASE_INVARIANT", (string str1, string str2) => string.Compare(str1, str2, StringComparison.InvariantCultureIgnoreCase));
     }
     /// <inheritdoc cref="SqliteConnection(SqliteConnectionOptions)"/>
     public SqliteConnection(string databasePath, OpenFlags openFlags = OpenFlags.Recommended)
@@ -46,7 +52,7 @@ public partial class SqliteConnection : IDisposable {
     /// <summary>
     /// The SQLite library version number. <c>3007014</c> refers to <c>v3.7.14</c>.
     /// </summary>
-    public static int SqliteVersionNumber => SqliteRaw.LibVersionNumber();
+    public static int SqliteVersionNumber => SqliteRaw.GetLibraryVersionNumber();
 
     /// <summary>
     /// When an operation can't be completed because a table is locked, the operation will be regularly repeated until <see cref="BusyTimeout"/> has elapsed.
@@ -55,7 +61,7 @@ public partial class SqliteConnection : IDisposable {
         get => field;
         set {
             field = value;
-            SqliteRaw.BusyTimeout(Handle, (int)field.TotalMilliseconds);
+            SqliteRaw.SetBusyTimeout(Handle, (int)field.TotalMilliseconds);
         }
     }
 
@@ -94,13 +100,22 @@ public partial class SqliteConnection : IDisposable {
     public void SetExtensionLoadingEnabled(bool enabled) {
         Result result = SqliteRaw.SetExtensionLoadingEnabled(Handle, enabled ? 1 : 0);
         if (result is not Result.OK) {
-            string errorMessage = SqliteRaw.GetErrorMessage(Handle);
-            throw new SqliteException(result, errorMessage);
+            throw new SqliteException(result, SqliteRaw.GetErrorMessage(Handle));
         }
     }
     /// <inheritdoc cref="SetExtensionLoadingEnabled(bool)"/>
     public Task EnableLoadExtensionAsync(bool enabled) {
         return Task.Run(() => SetExtensionLoadingEnabled(enabled));
+    }
+
+    /// <summary>
+    /// Creates a collation for string comparison.
+    /// </summary>
+    public void CreateCollation(string name, Func<string, string, int> compare) {
+        Result result = SqliteRaw.CreateCollation(Handle, name, compare);
+        if (result is not Result.OK) {
+            throw new SqliteException(result, SqliteRaw.GetErrorMessage(Handle));
+        }
     }
 
     /// <summary>
@@ -212,7 +227,7 @@ public partial class SqliteConnection : IDisposable {
         SqliteCommand command = CreateCommand(query, parameters);
         return command.ExecuteQueryScalars<T>();
     }
-    /// <inheritdoc cref="ExecuteQueryScalars{T}(string, IEnumerable{object?})"/>
+    /// <inheritdoc cref="ExecuteQueryScalarsAsync{T}(string, IEnumerable{object?})"/>
     public Task<IEnumerable<T>> ExecuteQueryScalarsAsync<T>(string query, params IEnumerable<object?> parameters) {
         return Task.Run(() => ExecuteQueryScalars<T>(query, parameters));
     }
@@ -222,7 +237,7 @@ public partial class SqliteConnection : IDisposable {
         SqliteCommand command = CreateCommand(query, parameters);
         return command.ExecuteQueryScalars<T>();
     }
-    /// <inheritdoc cref="ExecuteQueryScalars{T}(string, IDictionary{string, object?})"/>
+    /// <inheritdoc cref="ExecuteQueryScalarsAsync{T}(string, IDictionary{string, object?})"/>
     public Task<IEnumerable<T>> ExecuteQueryScalarsAsync<T>(string query, IDictionary<string, object?> parameters) {
         return Task.Run(() => ExecuteQueryScalars<T>(query, parameters));
     }

@@ -28,12 +28,14 @@ public class Orm {
         return TypeSerializers.TryRemove(typeof(T), out _);
     }
     public TypeSerializer GetTypeSerializer(Type type) {
-        // Get non-nullable type (int? -> int)
+        // Get non-nullable type (int? to int)
         type = type.AsNotNullable();
+
         // Try get serializer for exact type
         if (TypeSerializers.TryGetValue(type, out TypeSerializer typeSerializer)) {
             return typeSerializer;
         }
+
         // Try get fallback serializer for base type
         Type? fallbackType = type.BaseType;
         while (fallbackType is not null) {
@@ -42,6 +44,7 @@ public class Orm {
             }
             fallbackType = type.BaseType;
         }
+
         // Serializer not found
         throw new InvalidOperationException($"No {nameof(TypeSerializer)} found for '{type}'");
     }

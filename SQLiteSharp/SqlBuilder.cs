@@ -1,16 +1,13 @@
-using System;
 using System.Collections;
 using System.Diagnostics.CodeAnalysis;
 using System.Linq.Expressions;
-using System.Reflection;
 using System.Text;
 
 namespace SQLiteSharp;
 
-public class SqlBuilder2<T>(SqliteTable<T> table) where T : notnull, new() {
+public class SqlBuilder<T>(SqliteTable<T> table) where T : notnull, new() {
     public SqliteTable<T> Table { get; } = table;
     public Dictionary<string, object?> Parameters { get; } = [];
-    public Dictionary<string, object?> Sql = [];
 
     private readonly List<string> SelectList = [];
     private readonly List<string> OrderByList = [];
@@ -25,35 +22,35 @@ public class SqlBuilder2<T>(SqliteTable<T> table) where T : notnull, new() {
 
     private int CurrentParameterIndex;
 
-    public SqlBuilder2<T> Select() {
+    public SqlBuilder<T> Select() {
         SelectList.Add($"{Table.Name.SqlQuote()}.*");
         return this;
     }
-    public SqlBuilder2<T> Select(string columnName) {
+    public SqlBuilder<T> Select(string columnName) {
         SelectList.Add($"{Table.Name.SqlQuote()}.{columnName.SqlQuote()}");
         return this;
     }
-    public SqlBuilder2<T> Select(string columnName, SelectType selectType) {
+    public SqlBuilder<T> Select(string columnName, SelectType selectType) {
         SelectList.Add($"{selectType}({Table.Name.SqlQuote()}.{columnName.SqlQuote()})");
         return this;
     }
-    public SqlBuilder2<T> Select(SelectType selectType) {
+    public SqlBuilder<T> Select(SelectType selectType) {
         SelectList.Add($"{selectType}(*)");
         return this;
     }
-    public SqlBuilder2<T> OrderBy(string columnName) {
+    public SqlBuilder<T> OrderBy(string columnName) {
         OrderByList.Add($"{Table.Name.SqlQuote()}.{columnName.SqlQuote()}");
         return this;
     }
-    public SqlBuilder2<T> OrderByDescending(string columnName) {
+    public SqlBuilder<T> OrderByDescending(string columnName) {
         OrderByList.Add($"{Table.Name.SqlQuote()}.{columnName.SqlQuote()} desc");
         return this;
     }
-    public SqlBuilder2<T> GroupBy(string columnName) {
+    public SqlBuilder<T> GroupBy(string columnName) {
         GroupByList.Add($"{Table.Name.SqlQuote()}.{columnName.SqlQuote()}");
         return this;
     }
-    public SqlBuilder2<T> Where(string condition) {
+    public SqlBuilder<T> Where(string condition) {
         WhereList.Add(condition);
         return this;
     }
@@ -65,12 +62,15 @@ public class SqlBuilder2<T>(SqliteTable<T> table) where T : notnull, new() {
         Where($"{(negate ? "not" : "")} {Table.Name.SqlQuote()}.{columnName.SqlQuote()} {@operator}");
         return this;
     }*/
-    public SqlBuilder2<T> WhereIn(string columnName, IEnumerable values, bool negate = false) {
+    public SqlBuilder<T> WhereIn(string columnName, IEnumerable values, bool negate = false) {
         IEnumerable<string> parameterNames = values.Cast<object?>().Select(AddParameter);
         Where($"{(negate ? "not" : "")} {Table.Name.SqlQuote()}.{columnName.SqlQuote()} in ({string.Join(",", parameterNames)})");
         return this;
     }
-    public SqlBuilder2<T> Having(string condition) {
+    public SqlBuilder<T> WhereEquals(string columnName, StringComparison stringComparison) {
+
+    }
+    public SqlBuilder<T> Having(string condition) {
         HavingList.Add(condition);
         return this;
     }
@@ -82,28 +82,28 @@ public class SqlBuilder2<T>(SqliteTable<T> table) where T : notnull, new() {
         Having($"{(negate ? "not" : "")} {Table.Name.SqlQuote()}.{columnName.SqlQuote()} {@operator}");
         return this;
     }*/
-    public SqlBuilder2<T> HavingIn(string columnName, IEnumerable values, bool negate = false) {
+    public SqlBuilder<T> HavingIn(string columnName, IEnumerable values, bool negate = false) {
         IEnumerable<string> parameterNames = values.Cast<object?>().Select(AddParameter);
         Having($"{(negate ? "not" : "")} {Table.Name.SqlQuote()}.{columnName.SqlQuote()} in ({string.Join(",", parameterNames)})");
         return this;
     }
-    public SqlBuilder2<T> Take(long count) {
+    public SqlBuilder<T> Take(long count) {
         LimitCount = count;
         return this;
     }
-    public SqlBuilder2<T> Skip(long count) {
+    public SqlBuilder<T> Skip(long count) {
         OffsetCount = count;
         return this;
     }
-    public SqlBuilder2<T> Update(string columnName, string newValueExpression) {
+    public SqlBuilder<T> Update(string columnName, string newValueExpression) {
         UpdateList.Add($"{Table.Name.SqlQuote()}.{columnName.SqlQuote()}", newValueExpression);
         return this;
     }
-    public SqlBuilder2<T> Insert(string columnName, object? value) {
+    public SqlBuilder<T> Insert(string columnName, object? value) {
         InsertList.Add($"{Table.Name.SqlQuote()}.{columnName.SqlQuote()}", AddParameter(value));
         return this;
     }
-    public SqlBuilder2<T> Delete() {
+    public SqlBuilder<T> Delete() {
         DeleteFlag = true;
         return this;
     }
@@ -180,85 +180,85 @@ public class SqlBuilder2<T>(SqliteTable<T> table) where T : notnull, new() {
         return builder.ToString();
     }
 
-    /// <inheritdoc cref="SqliteTable{T}.ExecuteQuery(string, IEnumerable{object?})"/>
-    public IEnumerable<T> ExecuteQuery() {
-        return Table.ExecuteQuery(GetCommand(), Parameters);
-    }
-    /// <inheritdoc cref="SqliteTable{T}.ExecuteQueryAsync(string, IEnumerable{object?})"/>
-    public IAsyncEnumerable<T> ExecuteQueryAsync() {
-        return Table.ExecuteQueryAsync(GetCommand(), Parameters);
-    }
     /// <inheritdoc cref="SqliteConnection.Execute(string, IEnumerable{object?})"/>
     public int Execute() {
         return Table.Connection.Execute(GetCommand(), Parameters);
     }
-    /// <inheritdoc cref="SqliteConnection.Execute(string, IDictionary{string, object?})"/>
+    /// <inheritdoc cref="SqliteConnection.ExecuteAsync(string, IDictionary{string, object?})"/>
     public Task<int> ExecuteAsync() {
         return Table.Connection.ExecuteAsync(GetCommand(), Parameters);
     }
     /// <inheritdoc cref="SqliteConnection.ExecuteQueryScalars{T}(string, IEnumerable{object?})"/>
-    public IEnumerable<TScalar> ExecuteQueryScalars<TScalar>() {
+    public IEnumerable<TScalar> Get<TScalar>() {
         return Table.Connection.ExecuteQueryScalars<TScalar>(GetCommand(), Parameters);
     }
-    /// <inheritdoc cref="SqliteConnection.ExecuteQueryScalars{T}(string, IDictionary{string, object?})"/>
-    public Task<IEnumerable<TScalar>> ExecuteQueryScalarsAsync<TScalar>() {
+    /// <inheritdoc cref="SqliteConnection.ExecuteQueryScalarsAsync{T}(string, IDictionary{string, object?})"/>
+    public Task<IEnumerable<TScalar>> GetAsync<TScalar>() {
         return Table.Connection.ExecuteQueryScalarsAsync<TScalar>(GetCommand(), Parameters);
     }
+    /// <inheritdoc cref="SqliteTable{T}.ExecuteQuery(string, IEnumerable{object?})"/>
+    public IEnumerable<T> Find() {
+        return Table.ExecuteQuery(GetCommand(), Parameters);
+    }
+    /// <inheritdoc cref="SqliteTable{T}.ExecuteQueryAsync(string, IEnumerable{object?})"/>
+    public IAsyncEnumerable<T> FindAsync() {
+        return Table.ExecuteQueryAsync(GetCommand(), Parameters);
+    }
 
-    public SqlBuilder2<T> Select(Expression<Func<T, object?>> column) {
+    public SqlBuilder<T> Select(Expression<Func<T, object?>> column) {
         Select(MemberExpressionToColumnName(column));
         return this;
     }
-    public SqlBuilder2<T> Select(Expression<Func<T, object?>> column, SelectType selectType) {
+    public SqlBuilder<T> Select(Expression<Func<T, object?>> column, SelectType selectType) {
         Select(MemberExpressionToColumnName(column), selectType);
         return this;
     }
-    public SqlBuilder2<T> OrderBy(Expression<Func<T, object?>> column) {
+    public SqlBuilder<T> OrderBy(Expression<Func<T, object?>> column) {
         OrderBy(MemberExpressionToColumnName(column));
         return this;
     }
-    public SqlBuilder2<T> OrderByDescending(Expression<Func<T, object?>> column) {
+    public SqlBuilder<T> OrderByDescending(Expression<Func<T, object?>> column) {
         OrderByDescending(MemberExpressionToColumnName(column));
         return this;
     }
-    public SqlBuilder2<T> GroupBy(Expression<Func<T, object?>> column) {
+    public SqlBuilder<T> GroupBy(Expression<Func<T, object?>> column) {
         GroupBy(MemberExpressionToColumnName(column));
         return this;
     }
-    public SqlBuilder2<T> Where(Expression<Func<T, bool>> predicate) {
+    /*public SqlBuilder<T> Where(Expression<Func<T, bool>> predicate) {
         Where(ExpressionToSql(predicate.Body, predicate.Parameters[0]));
         return this;
     }
-    public SqlBuilder2<T> WhereIn(Expression<Func<T, bool>> predicate, IEnumerable values) {
+    public SqlBuilder<T> WhereIn(Expression<Func<T, bool>> predicate, IEnumerable values) {
         WhereIn(ExpressionToSql(predicate.Body, predicate.Parameters[0]), values);
         return this;
     }
-    public SqlBuilder2<T> WhereNotIn(Expression<Func<T, bool>> predicate, IEnumerable values) {
+    public SqlBuilder<T> WhereNotIn(Expression<Func<T, bool>> predicate, IEnumerable values) {
         WhereIn(ExpressionToSql(predicate.Body, predicate.Parameters[0]), values, negate: true);
         return this;
     }
-    public SqlBuilder2<T> Having(Expression<Func<T, bool>> predicate) {
+    public SqlBuilder<T> Having(Expression<Func<T, bool>> predicate) {
         Having(ExpressionToSql(predicate.Body, predicate.Parameters[0]));
         return this;
     }
-    public SqlBuilder2<T> HavingIn(Expression<Func<T, bool>> predicate, IEnumerable values) {
+    public SqlBuilder<T> HavingIn(Expression<Func<T, bool>> predicate, IEnumerable values) {
         HavingIn(ExpressionToSql(predicate.Body, predicate.Parameters[0]), values);
         return this;
     }
-    public SqlBuilder2<T> HavingNotIn(Expression<Func<T, bool>> predicate, IEnumerable values) {
+    public SqlBuilder<T> HavingNotIn(Expression<Func<T, bool>> predicate, IEnumerable values) {
         HavingIn(ExpressionToSql(predicate.Body, predicate.Parameters[0]), values, negate: true);
         return this;
     }
-    public SqlBuilder2<T> Update(Expression<Func<T, object?>> column, Expression<Func<T, object?>> newValueExpression) {
+    public SqlBuilder<T> Update(Expression<Func<T, object?>> column, Expression<Func<T, object?>> newValueExpression) {
         Update(MemberExpressionToColumnName(column), ExpressionToSql(newValueExpression.Body, newValueExpression.Parameters[0]));
         return this;
     }
-    public SqlBuilder2<T> Insert(Expression<Func<T, object?>> column, Expression<Func<T, object?>> valueExpression) {
+    public SqlBuilder<T> Insert(Expression<Func<T, object?>> column, Expression<Func<T, object?>> valueExpression) {
         Insert(MemberExpressionToColumnName(column), ExpressionToSql(valueExpression.Body, valueExpression.Parameters[0]));
         return this;
-    }
+    }*/
 
-    public static string OperatorToSql(ExpressionType operatorType) => operatorType switch {
+    /*public static string OperatorToSql(ExpressionType operatorType) => operatorType switch {
         ExpressionType.GreaterThan => ">",
         ExpressionType.GreaterThanOrEqual => ">=",
         ExpressionType.LessThan => "<",
@@ -278,7 +278,7 @@ public class SqlBuilder2<T>(SqliteTable<T> table) where T : notnull, new() {
         ExpressionType.LeftShift => "<<",
         ExpressionType.RightShift => ">>",
         _ => throw new NotSupportedException($"Cannot get SQL operator for {operatorType}")
-    };
+    };*/
     /*public static string LikeToSql(string expression, LikeMethod method) {
         return method switch {
             LikeMethod.Equals => $"{expression}",
@@ -299,7 +299,7 @@ public class SqlBuilder2<T>(SqliteTable<T> table) where T : notnull, new() {
         return name;
     }
 
-    private string ExpressionToSql(Expression expression, ParameterExpression rowExpression) {
+    /*private string ExpressionToSql(Expression expression, ParameterExpression rowExpression) {
         switch (expression) {
             // Constant (3)
             case ConstantExpression constantExpression:
@@ -343,15 +343,14 @@ public class SqlBuilder2<T>(SqliteTable<T> table) where T : notnull, new() {
             default:
                 throw new NotSupportedException($"{expression.GetType()}");
         }
-    }
+    }*/
     private string MemberExpressionToColumnName(LambdaExpression expression) {
         if (expression.Body is not MemberExpression memberExpression) {
             throw new ArgumentException("Expected member expression");
         }
-        string columnName = Table.MemberNameToColumnName(memberExpression.Member.Name);
-        return columnName;
+        return Table.MemberNameToColumnName(memberExpression.Member.Name);
     }
-    /// <summary>
+    /*/// <summary>
     /// Convert (a == null) to "a is null" because "null = null" is false.
     /// </summary>
     private bool TryConvertEqualsNullToIsNull(BinaryExpression binaryExpression, ParameterExpression rowExpression, [NotNullWhen(true)] out string? result) {
@@ -386,7 +385,7 @@ public class SqlBuilder2<T>(SqliteTable<T> table) where T : notnull, new() {
         }
         result = AddParameter(memberExpression.Execute());
         return true;
-    }
+    }*/
 }
 
 /// <summary>

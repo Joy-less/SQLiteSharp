@@ -33,13 +33,6 @@ public class SqliteTable<T> /*: SqliteTable*/ where T : notnull, new() {
         }
     }
 
-    public string GetFindByPrimaryKeySql() {
-        if (PrimaryKey is null) {
-            throw new InvalidOperationException("Cannot get by primary key because table has no primary key");
-        }
-        return $"select * from {Name.SqlQuote()} where {PrimaryKey.Name.SqlQuote()} = ?";
-    }
-
     /// <summary>
     /// Executes "drop table if not exists" on the database.
     /// </summary>
@@ -56,13 +49,13 @@ public class SqliteTable<T> /*: SqliteTable*/ where T : notnull, new() {
     }
 
     public long Count(Expression<Func<T, bool>>? predicate = null) {
-        SqlBuilder2<T> query = Query().Select(SelectType.Count);
+        SqlBuilder<T> query = Build().Select(SelectType.Count);
         if (predicate is not null) {
             query.Where(predicate);
         }
         string x = query.GetCommand();
         _ = x;
-        return query.ExecuteQueryScalars<long>().First();
+        return query.Get<long>().First();
     }
     public Task<long> CountAsync(Expression<Func<T, bool>>? predicate = null) {
         return Task.Run(() => Count(predicate));
@@ -72,8 +65,8 @@ public class SqliteTable<T> /*: SqliteTable*/ where T : notnull, new() {
     /// Builds a complex query using <see cref="DotNetBrightener.LinQToSqlBuilder"/>.<br/>
     /// The query can be executed using <see cref="ExecuteQuery(SqlBuilder{T})"/>.
     /// </summary>
-    public SqlBuilder2<T> Query() {
-        return new SqlBuilder2<T>(this);
+    public SqlBuilder<T> Build() {
+        return new SqlBuilder<T>(this);
     }
 
     /// <summary>
@@ -111,7 +104,16 @@ public class SqliteTable<T> /*: SqliteTable*/ where T : notnull, new() {
     /// The row with the primary key, or <see langword="null"/> if the row is not found.
     /// </returns>
     public T? FindByKey(object primaryKey) {
-        return ExecuteQuery(GetFindByPrimaryKeySql(), primaryKey).FirstOrDefault();
+        // Ensure table has primary key
+        if (PrimaryKey is null) {
+            throw new NotSupportedException($"Can't find in table '{Name}' since it has no annotated primary key");
+        }
+
+        // Build select SQL
+        string query = $"select * from {Name.SqlQuote()} where {PrimaryKey.Name.SqlQuote()} = ?";
+
+        // Execute select
+        return ExecuteQuery(query, primaryKey).FirstOrDefault();
     }
     /// <inheritdoc cref="FindByKey(object)"/>
     public Task<T?> FindByKeyAsync(object primaryKey) {
@@ -296,12 +298,13 @@ public class SqliteTable<T> /*: SqliteTable*/ where T : notnull, new() {
     /// The number of rows updated.
     /// </returns>
     public int UpdateOne(T row) {
-        // Get primary key column
-        SqliteColumn primaryKey = PrimaryKey
-            ?? throw new NotSupportedException($"Can't update in table '{Name}' since it has no annotated primary key");
+        // Ensure table has primary key
+        if (PrimaryKey is null) {
+            throw new NotSupportedException($"Can't update in table '{Name}' since it has no annotated primary key");
+        }
 
         // Get column and values to update
-        IEnumerable<SqliteColumn> columns = Columns.Where(column => column != primaryKey);
+        IEnumerable<SqliteColumn> columns = Columns.Where(column => column != PrimaryKey);
         IEnumerable<object?> values = columns.Select(column => column.GetValue(row));
 
         // Ensure at least one column will be updated
@@ -310,9 +313,9 @@ public class SqliteTable<T> /*: SqliteTable*/ where T : notnull, new() {
         }
 
         // Build update SQL with parameters
-        List<object?> parameters = [.. values, primaryKey.GetValue(row)];
+        List<object?> parameters = [.. values, PrimaryKey.GetValue(row)];
         string columnsSql = string.Join(",", columns.Select(column => $"{column.Name.SqlQuote()} = ?"));
-        string query = $"update {Name.SqlQuote()} set {columnsSql} where {primaryKey.Name.SqlQuote()} = ?";
+        string query = $"update {Name.SqlQuote()} set {columnsSql} where {PrimaryKey.Name.SqlQuote()} = ?";
 
         // Execute update
         int rowCount = Connection.Execute(query, parameters);
@@ -353,12 +356,13 @@ public class SqliteTable<T> /*: SqliteTable*/ where T : notnull, new() {
     /// The number of rows deleted.
     /// </returns>
     public int DeleteByKey(object primaryKey) {
-        // Get primary key column
-        SqliteColumn primaryKeyColumn = PrimaryKey
-            ?? throw new NotSupportedException($"Can't delete in table '{Name}' since it has no annotated primary key");
+        // Ensure table has primary key
+        if (PrimaryKey is null) {
+            throw new NotSupportedException($"Can't delete in table '{Name}' since it has no annotated primary key");
+        }
 
         // Build delete SQL
-        string query = $"delete from {Name.SqlQuote()} where {primaryKeyColumn.Name.SqlQuote()} = ?";
+        string query = $"delete from {Name.SqlQuote()} where {PrimaryKey.Name.SqlQuote()} = ?";
 
         // Execute delete
         int rowCount = Connection.Execute(query, primaryKey);

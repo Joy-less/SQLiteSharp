@@ -13,4 +13,11 @@ public static class CollationType {
     /// Compares the strings, ignoring trailing whitespace.
     /// </summary>
     public const string RTrim = "RTRIM";
+    /// <summary>
+    /// Compares the strings with case-insensitive unicode characters.
+    /// </summary>
+    /// <remarks>
+    /// This is a custom collation created by <see cref="SQLiteSharp"/>.
+    /// </remarks>
+    public const string NoCaseInvariant = "NOCASE_INVARIANT";
 }
