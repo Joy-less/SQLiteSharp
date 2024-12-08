@@ -4,12 +4,28 @@
     <LangVersion>preview</LangVersion>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
-    <NoWarn>IDE0130</NoWarn>
+    <NoWarn>IDE0130;CS1573</NoWarn>
+    <GenerateDocumentationFile>True</GenerateDocumentationFile>
+    <GeneratePackageOnBuild>True</GeneratePackageOnBuild>
+    <PackageId>SQLiteSharp</PackageId>
+    <Title>SQLiteSharp</Title>
+    <Authors>Joyless</Authors>
+    <Description>A powerful library to help you access a SQLite database in C#.</Description>
+    <PackageProjectUrl>https://github.com/Joy-less/SQLiteSharp</PackageProjectUrl>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <RepositoryUrl>https://github.com/Joy-less/SQLiteSharp</RepositoryUrl>
+    <PackageTags>SQLite;SQL;database;ORM</PackageTags>
   </PropertyGroup>
   <ItemGroup>
     <Compile Remove="LinqToSQL\**" />
     <EmbeddedResource Remove="LinqToSQL\**" />
     <None Remove="LinqToSQL\**" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="..\README.md">
+      <Pack>True</Pack>
+      <PackagePath>\</PackagePath>
+    </None>
   </ItemGroup>
   <ItemGroup>
     <PackageReference Include="PolySharp" Version="1.15.0">

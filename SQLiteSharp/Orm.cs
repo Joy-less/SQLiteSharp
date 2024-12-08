@@ -63,11 +63,14 @@ public class Orm {
         if (column.IsPrimaryKey) {
             declaration += "primary key ";
         }
-        if (column.IsAutoIncrement) {
+        if (column.IsAutoIncremented) {
             declaration += "autoincrement ";
         }
         if (column.IsNotNull) {
             declaration += "not null ";
+        }
+        if (column.IsUnique) {
+            declaration += "unique ";
         }
         if (column.Collation is not null) {
             declaration += $"collate {column.Collation.SqlQuote()} ";

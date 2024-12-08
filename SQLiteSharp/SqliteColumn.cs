@@ -9,9 +9,10 @@ public class SqliteColumn {
     public Type ClrType { get; }
     public string? Collation { get; }
     public string? Check { get; }
-    public bool IsAutoIncrement { get; }
+    public bool IsAutoIncremented { get; }
     public bool IsPrimaryKey { get; }
     public bool IsNotNull { get; }
+    public bool IsUnique { get; }
     public IndexAttribute[] Indexes { get; }
 
     public SqliteColumn(SqliteConnection connection, MemberInfo member) {
@@ -20,7 +21,7 @@ public class SqliteColumn {
         ClrMember = member;
         ClrType = GetMemberType(member);
 
-        Name = member.GetCustomAttribute<ColumnAttribute>()?.Name ?? member.Name;
+        Name = member.GetCustomAttribute<AliasAttribute>()?.Name ?? member.Name;
 
         Collation = member.GetCustomAttribute<CollationAttribute>()?.Value;
 
@@ -29,13 +30,15 @@ public class SqliteColumn {
         IsPrimaryKey = member.GetCustomAttribute<PrimaryKeyAttribute>() is not null
             || Connection.Orm.IsImplicitPrimaryKey(member);
 
-        IsAutoIncrement = member.GetCustomAttribute<AutoIncrementAttribute>() is not null
+        IsAutoIncremented = member.GetCustomAttribute<AutoIncrementAttribute>() is not null
             || (IsPrimaryKey && Connection.Orm.IsImplicitAutoIncrementedPrimaryKey(member));
 
         Indexes = [.. member.GetCustomAttributes<IndexAttribute>()];
-        if (Indexes.Length == 0 && !IsPrimaryKey && Connection.Orm.IsImplicitIndex(member)) {
+        if (Indexes.Length == 0 && Connection.Orm.IsImplicitIndex(member)) {
             Indexes = [new IndexAttribute()];
         }
+
+        IsUnique = member.GetCustomAttribute<UniqueAttribute>() is not null;
 
         IsNotNull = member.GetCustomAttribute<NotNullAttribute>() is not null
             || IsPrimaryKey;

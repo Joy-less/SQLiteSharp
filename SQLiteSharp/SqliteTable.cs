@@ -16,13 +16,10 @@ public class SqliteTable<T> : SqliteTable where T : notnull, new() {
     public bool HasAutoIncrementedPrimaryKey { get; }
 
     internal SqliteTable(SqliteConnection connection, string? name = null, string? virtualModule = null, bool createTable = true) {
-        TableAttribute? tableAttribute = typeof(T).GetCustomAttribute<TableAttribute>();
-        WithoutRowIdAttribute? withoutRowIdAttribute = typeof(T).GetCustomAttribute<WithoutRowIdAttribute>();
-
         Connection = connection;
-        Name = name ?? tableAttribute?.Name ?? typeof(T).Name;
+        Name = name ?? typeof(T).GetCustomAttribute<AliasAttribute>()?.Name ?? typeof(T).Name;
         VirtualModule = virtualModule;
-        WithoutRowId = withoutRowIdAttribute is not null;
+        WithoutRowId = typeof(T).GetCustomAttribute<WithoutRowIdAttribute>() is not null;
 
         (Columns, PrimaryKey) = GetColumnsFromMembers();
 
@@ -166,7 +163,7 @@ public class SqliteTable<T> : SqliteTable where T : notnull, new() {
         SqliteColumn[] columns = Columns;
         // Strip auto-incremented columns (unless "OR REPLACE"/"OR IGNORE")
         if (string.IsNullOrEmpty(modifier)) {
-            columns = [.. columns.Where(column => !column.IsAutoIncrement)];
+            columns = [.. columns.Where(column => !column.IsAutoIncremented)];
         }
 
         // Get column values for object (row)
