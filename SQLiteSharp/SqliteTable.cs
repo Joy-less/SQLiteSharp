@@ -4,10 +4,9 @@ using System.Reflection;
 
 namespace SQLiteSharp;
 
-/*public abstract class SqliteTable {
-
-}*/
-public class SqliteTable<T> /*: SqliteTable*/ where T : notnull, new() {
+public abstract class SqliteTable {
+}
+public class SqliteTable<T> : SqliteTable where T : notnull, new() {
     public SqliteConnection Connection { get; }
     public string Name { get; }
     public string? VirtualModule { get; }

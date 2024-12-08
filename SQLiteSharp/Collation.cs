@@ -32,5 +32,5 @@ public static class Collation {
     /// <remarks>
     /// This is a custom collation created automatically and corresponds to <see cref="StringComparison.InvariantCultureIgnoreCase"/>.
     /// </remarks>
-    public const string InvariantNoCase = "INVARIANT_NOCASE";
+    public const string Invariant_NoCase = "INVARIANT_NOCASE";
 }

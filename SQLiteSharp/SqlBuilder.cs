@@ -60,20 +60,10 @@ public class SqlBuilder<T> where T : notnull, new() {
         WhereList.Add(condition);
         return this;
     }
-    /*public SqlBuilder<T> WhereIn(string columnName, IEnumerable values, bool negate = false) {
-        IEnumerable<string> parameterNames = values.Cast<object?>().Select(AddParameter);
-        Where($"{(negate ? "not" : "")} {Table.Name.SqlQuote()}.{columnName.SqlQuote()} in ({string.Join(",", parameterNames)})");
-        return this;
-    }*/
     public SqlBuilder<T> Having(string condition) {
         HavingList.Add(condition);
         return this;
     }
-    /*public SqlBuilder<T> HavingIn(string columnName, IEnumerable values, bool negate = false) {
-        IEnumerable<string> parameterNames = values.Cast<object?>().Select(AddParameter);
-        Having($"{(negate ? "not" : "")} {Table.Name.SqlQuote()}.{columnName.SqlQuote()} in ({string.Join(",", parameterNames)})");
-        return this;
-    }*/
     public SqlBuilder<T> Take(long count) {
         LimitCount = count;
         return this;
@@ -256,7 +246,7 @@ public class SqlBuilder<T> where T : notnull, new() {
         StringComparison.InvariantCulture
         or StringComparison.CurrentCulture => Collation.Invariant,
         StringComparison.InvariantCultureIgnoreCase
-        or StringComparison.CurrentCultureIgnoreCase => Collation.InvariantNoCase,
+        or StringComparison.CurrentCultureIgnoreCase => Collation.Invariant_NoCase,
         _ => throw new NotImplementedException($"{stringComparison.GetType()}")
     };
 
@@ -414,10 +404,32 @@ public delegate string MethodToSqlConverter<T>(MethodCallExpression methodCall) 
 /// See <see href="https://www.sqlite.org/lang_aggfunc.html">Built-in Aggregate Functions</see>.
 /// </summary>
 public enum SelectType {
+    /// <summary>
+    /// The mean (average) of the values.
+    /// </summary>
     Avg,
+    /// <summary>
+    /// The number of non-null values.
+    /// </summary>
     Count,
+    /// <summary>
+    /// The string concatenation of the non-null values.
+    /// </summary>
+    Group_Concat,
+    /// <summary>
+    /// The minimum non-null value.
+    /// </summary>
     Min,
+    /// <summary>
+    /// The maximum non-null value.
+    /// </summary>
     Max,
+    /// <summary>
+    /// The sum (addition) of all the non-null values.
+    /// </summary>
     Sum,
+    /// <summary>
+    /// Similar to <see cref="Sum"/> but always returns a floating-point value (even if there are only integers or null).
+    /// </summary>
     Total,
 }
