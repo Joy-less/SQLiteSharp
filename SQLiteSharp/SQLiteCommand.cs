@@ -24,6 +24,28 @@ public class SqliteCommand(SqliteConnection connection) {
             throw new SqliteException(result, SqliteRaw.GetErrorMessage(Connection.Handle));
         }
     }
+    public IEnumerable<T> ExecuteScalars<T>() {
+        Sqlite3Statement statement = Prepare();
+        try {
+            while (true) {
+                Result result = SqliteRaw.Step(statement);
+
+                if (result is Result.Row) {
+                    object? value = ReadColumn(statement, 0, typeof(T));
+                    yield return value is not null ? (T)value : default!;
+                }
+                else if (result is Result.Done) {
+                    break;
+                }
+                else {
+                    throw new SqliteException(result, SqliteRaw.GetErrorMessage(Connection.Handle));
+                }
+            }
+        }
+        finally {
+            SqliteRaw.Finalize(statement);
+        }
+    }
     public IEnumerable<T> ExecuteQuery<T>(SqliteTable<T> table) where T : notnull, new() {
         Sqlite3Statement statement = Prepare();
         try {
@@ -50,28 +72,6 @@ public class SqliteCommand(SqliteConnection connection) {
                 // Return row object
                 OnInstanceCreated?.Invoke(row);
                 yield return row;
-            }
-        }
-        finally {
-            SqliteRaw.Finalize(statement);
-        }
-    }
-    public IEnumerable<T> ExecuteQueryScalars<T>() {
-        Sqlite3Statement statement = Prepare();
-        try {
-            while (true) {
-                Result result = SqliteRaw.Step(statement);
-
-                if (result is Result.Row) {
-                    object? value = ReadColumn(statement, 0, typeof(T));
-                    yield return value is not null ? (T)value : default!;
-                }
-                else if (result is Result.Done) {
-                    break;
-                }
-                else {
-                    throw new SqliteException(result, SqliteRaw.GetErrorMessage(Connection.Handle));
-                }
             }
         }
         finally {

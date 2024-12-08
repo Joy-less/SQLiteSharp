@@ -53,17 +53,14 @@ public class SqliteTable<T> /*: SqliteTable*/ where T : notnull, new() {
         if (predicate is not null) {
             query.Where(predicate);
         }
-        string x = query.GetCommand();
-        _ = x;
-        return query.Get<long>().First();
+        return query.ExecuteScalars<long>().First();
     }
     public Task<long> CountAsync(Expression<Func<T, bool>>? predicate = null) {
         return Task.Run(() => Count(predicate));
     }
 
     /// <summary>
-    /// Builds a complex query using <see cref="DotNetBrightener.LinQToSqlBuilder"/>.<br/>
-    /// The query can be executed using <see cref="ExecuteQuery(SqlBuilder{T})"/>.
+    /// Returns a <see cref="SqlBuilder{T}"/> to build and execute a complex SQL query using the fluent style.
     /// </summary>
     public SqlBuilder<T> Build() {
         return new SqlBuilder<T>(this);
@@ -97,6 +94,17 @@ public class SqliteTable<T> /*: SqliteTable*/ where T : notnull, new() {
     }
 
     /// <summary>
+    /// Retrieves every row in the table.
+    /// </summary>
+    public IEnumerable<T> FindAll() {
+        return Build().Select().ExecuteQuery();
+    }
+    /// <inheritdoc cref="FindAll()"/>
+    public IAsyncEnumerable<T> FindAllAsync() {
+        return FindAll().ToAsyncEnumerable();
+    }
+
+    /// <summary>
     /// Retrieves an row with the primary key.<br/>
     /// The table must have a designated primary key.
     /// </summary>
@@ -121,46 +129,38 @@ public class SqliteTable<T> /*: SqliteTable*/ where T : notnull, new() {
     }
 
     /// <summary>
+    /// Retrieves each row matching the predicate.
+    /// </summary>
+    /// <returns>
+    /// The rows matching the predicate.
+    /// </returns>
+    public IEnumerable<T> Find(Expression<Func<T, bool>> predicate) {
+        return Build().Select().Where(predicate).ExecuteQuery();
+    }
+    /// <inheritdoc cref="FindOne(Expression{Func{T, bool}})"/>
+    public IAsyncEnumerable<T> FindAsync(Expression<Func<T, bool>> predicate) {
+        return Find(predicate).ToAsyncEnumerable();
+    }
+
+    /// <summary>
     /// Retrieves the first row matching the predicate.
     /// </summary>
     /// <returns>
     /// The first row matching the predicate, or <see langword="null"/> if no rows match the predicate.
     /// </returns>
     public T? FindOne(Expression<Func<T, bool>> predicate) {
-        return default; // TODO
-        //return Table<T>().Where(predicate).FirstOrDefault();
+        return Find(predicate).FirstOrDefault();
     }
     /// <inheritdoc cref="FindOne(Expression{Func{T, bool}})"/>
     public Task<T?> FindOneAsync(Expression<Func<T, bool>> predicate) {
         return Task.Run(() => FindOne(predicate));
     }
 
-    /*/// <summary>
-    /// Retrieves the first row matching the SQL query from the associated table.
-    /// </summary>
-    /// <returns>
-    /// The first row matching the query, or <see langword="null"/> if no rows match the query.
-    /// </returns>
-    public T? FindOneByQuery(string query, params IEnumerable<object?> parameters) {
-        return ExecuteQuery(query, parameters).FirstOrDefault();
-    }
-    /// <inheritdoc cref="FindOneByQuery(string, IEnumerable{object?})"/>
-    public Task<T?> FindOneByQueryAsync(string query, params IEnumerable<object?> parameters) {
-        return Task.Run(() => FindOneByQuery(query, parameters));
-    }*/
-
     /// <summary>
     /// Inserts the row into the table, updating any auto-incremented primary keys.<br/>
     /// </summary>
     /// <param name="modifier">
-    /// Literal SQL added after <c>INSERT</c>:
-    /// <code>
-    /// OR REPLACE
-    /// OR IGNORE
-    /// OR ABORT
-    /// OR FAIL
-    /// OR ROLLBACK
-    /// </code>
+    /// Literal SQL added after <c>INSERT</c>: <c>[OR REPLACE, OR IGNORE, OR ABORT, OR FAIL, OR ROLLBACK]</c>
     /// </param>
     /// <returns>The number of rows added.</returns>
     public int Insert(T row, string? modifier = null) {
@@ -197,11 +197,7 @@ public class SqliteTable<T> /*: SqliteTable*/ where T : notnull, new() {
         return Task.Run(() => Insert(row, orModifier));
     }
 
-    /// <summary>
-    /// Inserts each row into the table, updating any auto-incremented primary keys.<br/>
-    /// The <paramref name="modifier"/> is literal SQL added after <c>INSERT</c> (e.g. <c>OR REPLACE</c>).
-    /// </summary>
-    /// <returns>The number of rows added.</returns>
+    /// <inheritdoc cref="Insert(T, string?)"/>
     public int InsertAll(IEnumerable<T> rows, string? modifier = null) {
         int counter = 0;
         Connection.RunInTransaction(() => {
@@ -350,6 +346,23 @@ public class SqliteTable<T> /*: SqliteTable*/ where T : notnull, new() {
     }
 
     /// <summary>
+    /// Deletes every object from the specified table.
+    /// </summary>
+    /// <remarks>
+    /// This is non-recoverable.
+    /// </remarks>
+    /// <returns>
+    /// The number of rows deleted.
+    /// </returns>
+    public int DeleteAll() {
+        return Build().Delete().Execute();
+    }
+    /// <inheritdoc cref="DeleteAll()"/>
+    public Task<int> DeleteAllAsync() {
+        return Task.Run(DeleteAll);
+    }
+
+    /// <summary>
     /// Deletes the row with the specified primary key.
     /// </summary>
     /// <returns>
@@ -394,22 +407,17 @@ public class SqliteTable<T> /*: SqliteTable*/ where T : notnull, new() {
     }
 
     /// <summary>
-    /// Deletes every object from the specified table.
+    /// Deletes each row matching the predicate.
     /// </summary>
-    /// <remarks>
-    /// This is non-recoverable.
-    /// </remarks>
     /// <returns>
     /// The number of rows deleted.
     /// </returns>
-    public int DeleteAll() {
-        string query = $"delete from {Name.SqlQuote()}";
-        int rowCount = Connection.Execute(query);
-        return rowCount;
+    public int Delete(Expression<Func<T, bool>> predicate) {
+        return Build().Delete().Where(predicate).Execute();
     }
-    /// <inheritdoc cref="DeleteAll()"/>
-    public Task<int> DeleteAllAsync() {
-        return Task.Run(DeleteAll);
+    /// <inheritdoc cref="Delete(Expression{Func{T, bool}})"/>
+    public Task<int> DeleteAsync(Expression<Func<T, bool>> predicate) {
+        return Task.Run(() => Delete(predicate));
     }
 
     /// <summary>
@@ -515,11 +523,8 @@ public class SqliteTable<T> /*: SqliteTable*/ where T : notnull, new() {
         return ([.. columns], primaryKey);
     }
     private void CreateOrMigrateTable() {
-        // Check if the table already exists
-        List<ColumnInfo> existingColumns = Connection.GetTableInfo(Name).ToList();
-
         // Create new table
-        if (Connection.TableExists(Name)) {
+        if (!Connection.TableExists(Name)) {
             // Add virtual table modifiers
             string virtualModifier = VirtualModule is not null ? "virtual" : "";
             string usingModifier = VirtualModule is not null ? $"using {VirtualModule.SqlQuote()}" : "";
@@ -537,10 +542,15 @@ public class SqliteTable<T> /*: SqliteTable*/ where T : notnull, new() {
         }
         // Migrate existing table
         else {
-            List<SqliteColumn> newColumns = Columns.Where(column
-                => !existingColumns.Any(existingColumn => existingColumn.Name.Equals(column.Name, StringComparison.OrdinalIgnoreCase))
+            // Get columns already in the table
+            List<ColumnInfo> existingColumns = Connection.GetTableInfo(Name).ToList();
+
+            // Get new columns to add
+            List<SqliteColumn> newColumns = Columns.Where(
+                column => !existingColumns.Any(existingColumn => existingColumn.Name.Equals(column.Name, StringComparison.OrdinalIgnoreCase))
             ).ToList();
 
+            // Add new columns
             foreach (SqliteColumn column in newColumns) {
                 string sql = $"alter table {Name.SqlQuote()} add column {Connection.Orm.GetSqlDeclaration(column)}";
                 Connection.Execute(sql);

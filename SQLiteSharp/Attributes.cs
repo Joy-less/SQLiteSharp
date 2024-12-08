@@ -52,7 +52,7 @@ public class NotNullAttribute() : Attribute {
 }
 
 /// <summary>
-/// The method of string comparison to use with the value (see <see cref="CollationType"/>).
+/// The method of string comparison to use with the value (see <see cref="Collation"/>).
 /// </summary>
 [AttributeUsage(AttributeTargets.Property | AttributeTargets.Field)]
 public class CollationAttribute(string collation) : Attribute {

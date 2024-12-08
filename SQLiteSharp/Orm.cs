@@ -36,6 +36,13 @@ public class Orm {
             return typeSerializer;
         }
 
+        // Try get fallback serializer for interface
+        foreach (Type fallbackInterface in type.GetInterfaces()) {
+            if (TypeSerializers.TryGetValue(fallbackInterface, out typeSerializer)) {
+                return typeSerializer;
+            }
+        }
+
         // Try get fallback serializer for base type
         Type? fallbackType = type.BaseType;
         while (fallbackType is not null) {

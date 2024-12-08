@@ -26,19 +26,12 @@ public class ReadMeTest {
         ShopItem? Apple = ShopItems.FindOne(ShopItem => ShopItem.ItemName == "Apple");
         Assert.NotNull(Apple);
 
-        ShopItem? Apple = ShopItems.Build().Select().WhereEquals(ShopItem => ShopItem.ItemName, "Apple").Find();
-
-        ShopItem? Apple = ShopItems.Build().WhereEquals(ShopItem => ShopItem.ItemName, "Apple").ExecuteQuery();
-
         // Delete an item from the table
-        //ShopItems.DeleteByKey(Apple.Id);
-
-        long z = ShopItems.Count(ShopItem => ShopItem.ItemName != null);
-        _ = z;
+        ShopItems.DeleteByKey(Apple.Id);
 
         // Find several items in the table
-        //List<ShopItem> Bananas = Connection.Table<ShopItem>().Where(ShopItem => ShopItem.ItemName == "Banana").ToList();
-        //Assert.Single(Bananas);
+        List<ShopItem> Bananas = ShopItems.Find(ShopItem => ShopItem.ItemName == "Banana").ToList();
+        Assert.Single(Bananas);
     }
     [Fact]
     public void Test2() {

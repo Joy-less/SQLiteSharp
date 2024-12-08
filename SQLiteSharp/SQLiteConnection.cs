@@ -24,7 +24,7 @@ public partial class SqliteConnection : IDisposable {
     /// </summary>
     public SqliteConnection(SqliteConnectionOptions options) {
         Options = options;
-        Orm = Options.Orm ?? new Orm();
+        Orm = options.Orm ?? new Orm();
 
         // Try to open database
         Result openResult = SqliteRaw.Open(options.DatabasePath, out Sqlite3DatabaseHandle handle, options.OpenFlags, null);
@@ -33,16 +33,15 @@ public partial class SqliteConnection : IDisposable {
         }
         Handle = handle;
 
-        // Set initial operation busy timeout
-        BusyTimeout = TimeSpan.FromSeconds(1.0);
-
         // Use encryption key
         if (options.EncryptionKey is not null) {
             SqliteRaw.SetKey(Handle, options.EncryptionKey);
         }
 
         // Create custom collations
-        CreateCollation("NOCASE_INVARIANT", (string str1, string str2) => string.Compare(str1, str2, StringComparison.InvariantCultureIgnoreCase));
+        foreach (KeyValuePair<string, Func<string, string, int>> collation in options.Collations) {
+            CreateCollation(collation.Key, collation.Value);
+        }
     }
     /// <inheritdoc cref="SqliteConnection(SqliteConnectionOptions)"/>
     public SqliteConnection(string databasePath, OpenFlags openFlags = OpenFlags.Recommended)
@@ -53,17 +52,6 @@ public partial class SqliteConnection : IDisposable {
     /// The SQLite library version number. <c>3007014</c> refers to <c>v3.7.14</c>.
     /// </summary>
     public static int SqliteVersionNumber => SqliteRaw.GetLibraryVersionNumber();
-
-    /// <summary>
-    /// When an operation can't be completed because a table is locked, the operation will be regularly repeated until <see cref="BusyTimeout"/> has elapsed.
-    /// </summary>
-    public TimeSpan BusyTimeout {
-        get => field;
-        set {
-            field = value;
-            SqliteRaw.SetBusyTimeout(Handle, (int)field.TotalMilliseconds);
-        }
-    }
 
     /// <summary>
     /// Closes the connection to the database.
@@ -95,7 +83,8 @@ public partial class SqliteConnection : IDisposable {
     }
 
     /// <summary>
-    /// Enables or disables <see href="https://sqlite.org/loadext.html">extension loading</see>.
+    /// Enables or disables <see href="https://sqlite.org/loadext.html">extension loading</see>.<br/>
+    /// Default: <see langword="false"/>
     /// </summary>
     public void SetExtensionLoadingEnabled(bool enabled) {
         Result result = SqliteRaw.SetExtensionLoadingEnabled(Handle, enabled ? 1 : 0);
@@ -104,13 +93,24 @@ public partial class SqliteConnection : IDisposable {
         }
     }
     /// <inheritdoc cref="SetExtensionLoadingEnabled(bool)"/>
-    public Task EnableLoadExtensionAsync(bool enabled) {
+    public Task SetExtensionLoadingEnabledAsync(bool enabled) {
         return Task.Run(() => SetExtensionLoadingEnabled(enabled));
+    }
+
+    /// <summary>
+    /// Sets the <see href="https://www.sqlite.org/c3ref/busy_timeout.html">busy timeout</see>.<br/>
+    /// Default: 30 seconds
+    /// </summary>
+    public void SetBusyTimeout(TimeSpan value) {
+        SqliteRaw.SetBusyTimeout(Handle, (int)value.TotalMilliseconds);
     }
 
     /// <summary>
     /// Creates a collation for string comparison.
     /// </summary>
+    /// <remarks>
+    /// Redefining an existing collation will break existing indexes using that collation.
+    /// </remarks>
     public void CreateCollation(string name, Func<string, string, int> compare) {
         Result result = SqliteRaw.CreateCollation(Handle, name, compare);
         if (result is not Result.OK) {
@@ -223,23 +223,23 @@ public partial class SqliteConnection : IDisposable {
     /// <returns>
     /// The first column of each row returned by the query.
     /// </returns>
-    public IEnumerable<T> ExecuteQueryScalars<T>(string query, params IEnumerable<object?> parameters) {
+    public IEnumerable<T> ExecuteScalar<T>(string query, params IEnumerable<object?> parameters) {
         SqliteCommand command = CreateCommand(query, parameters);
-        return command.ExecuteQueryScalars<T>();
+        return command.ExecuteScalars<T>();
     }
-    /// <inheritdoc cref="ExecuteQueryScalarsAsync{T}(string, IEnumerable{object?})"/>
-    public Task<IEnumerable<T>> ExecuteQueryScalarsAsync<T>(string query, params IEnumerable<object?> parameters) {
-        return Task.Run(() => ExecuteQueryScalars<T>(query, parameters));
+    /// <inheritdoc cref="ExecuteScalar{T}(string, IEnumerable{object?})"/>
+    public Task<IEnumerable<T>> ExecuteScalarAsync<T>(string query, params IEnumerable<object?> parameters) {
+        return Task.Run(() => ExecuteScalar<T>(query, parameters));
     }
 
-    /// <inheritdoc cref="ExecuteQueryScalars{T}(string, IEnumerable{object?})"/>
-    public IEnumerable<T> ExecuteQueryScalars<T>(string query, IDictionary<string, object?> parameters) {
+    /// <inheritdoc cref="ExecuteScalar{T}(string, IEnumerable{object?})"/>
+    public IEnumerable<T> ExecuteScalars<T>(string query, IDictionary<string, object?> parameters) {
         SqliteCommand command = CreateCommand(query, parameters);
-        return command.ExecuteQueryScalars<T>();
+        return command.ExecuteScalars<T>();
     }
-    /// <inheritdoc cref="ExecuteQueryScalarsAsync{T}(string, IDictionary{string, object?})"/>
-    public Task<IEnumerable<T>> ExecuteQueryScalarsAsync<T>(string query, IDictionary<string, object?> parameters) {
-        return Task.Run(() => ExecuteQueryScalars<T>(query, parameters));
+    /// <inheritdoc cref="ExecuteScalars{T}(string, IDictionary{string, object?})"/>
+    public Task<IEnumerable<T>> ExecuteScalarsAsync<T>(string query, IDictionary<string, object?> parameters) {
+        return Task.Run(() => ExecuteScalars<T>(query, parameters));
     }
 
     /// <summary>

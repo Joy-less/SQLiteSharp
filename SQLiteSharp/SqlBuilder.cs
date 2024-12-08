@@ -1,13 +1,14 @@
-using System.Collections;
 using System.Diagnostics.CodeAnalysis;
 using System.Linq.Expressions;
+using System.Reflection;
 using System.Text;
 
 namespace SQLiteSharp;
 
-public class SqlBuilder<T>(SqliteTable<T> table) where T : notnull, new() {
-    public SqliteTable<T> Table { get; } = table;
+public class SqlBuilder<T> where T : notnull, new() {
+    public SqliteTable<T> Table { get; }
     public Dictionary<string, object?> Parameters { get; } = [];
+    public Dictionary<MethodInfo, MethodToSqlConverter<T>> MethodToSqlConverters { get; } = [];
 
     private readonly List<string> SelectList = [];
     private readonly List<string> OrderByList = [];
@@ -22,6 +23,11 @@ public class SqlBuilder<T>(SqliteTable<T> table) where T : notnull, new() {
 
     private int CurrentParameterIndex;
 
+    public SqlBuilder(SqliteTable<T> table) {
+        Table = table;
+
+        AddDefaultMethodToSqlConverters();
+    }
     public SqlBuilder<T> Select() {
         SelectList.Add($"{Table.Name.SqlQuote()}.*");
         return this;
@@ -54,39 +60,20 @@ public class SqlBuilder<T>(SqliteTable<T> table) where T : notnull, new() {
         WhereList.Add(condition);
         return this;
     }
-    /*public SqlBuilder2<T> Where(string columnName, string @operator, object? value, bool negate = false) {
-        Where($"{(negate ? "not" : "")} {Table.Name.SqlQuote()}.{columnName.SqlQuote()} {@operator} {AddParameter(value)}");
-        return this;
-    }
-    public SqlBuilder2<T> Where(string columnName, string @operator, bool negate = false) {
-        Where($"{(negate ? "not" : "")} {Table.Name.SqlQuote()}.{columnName.SqlQuote()} {@operator}");
-        return this;
-    }*/
-    public SqlBuilder<T> WhereIn(string columnName, IEnumerable values, bool negate = false) {
+    /*public SqlBuilder<T> WhereIn(string columnName, IEnumerable values, bool negate = false) {
         IEnumerable<string> parameterNames = values.Cast<object?>().Select(AddParameter);
         Where($"{(negate ? "not" : "")} {Table.Name.SqlQuote()}.{columnName.SqlQuote()} in ({string.Join(",", parameterNames)})");
         return this;
-    }
-    public SqlBuilder<T> WhereEquals(string columnName, StringComparison stringComparison) {
-
-    }
+    }*/
     public SqlBuilder<T> Having(string condition) {
         HavingList.Add(condition);
         return this;
     }
-    /*public SqlBuilder2<T> Having(string columnName, string @operator, object? value, bool negate = false) {
-        Having($"{(negate ? "not" : "")} {Table.Name.SqlQuote()}.{columnName.SqlQuote()} {@operator} {AddParameter(value)}");
-        return this;
-    }
-    public SqlBuilder2<T> Having(string columnName, string @operator, bool negate = false) {
-        Having($"{(negate ? "not" : "")} {Table.Name.SqlQuote()}.{columnName.SqlQuote()} {@operator}");
-        return this;
-    }*/
-    public SqlBuilder<T> HavingIn(string columnName, IEnumerable values, bool negate = false) {
+    /*public SqlBuilder<T> HavingIn(string columnName, IEnumerable values, bool negate = false) {
         IEnumerable<string> parameterNames = values.Cast<object?>().Select(AddParameter);
         Having($"{(negate ? "not" : "")} {Table.Name.SqlQuote()}.{columnName.SqlQuote()} in ({string.Join(",", parameterNames)})");
         return this;
-    }
+    }*/
     public SqlBuilder<T> Take(long count) {
         LimitCount = count;
         return this;
@@ -188,20 +175,20 @@ public class SqlBuilder<T>(SqliteTable<T> table) where T : notnull, new() {
     public Task<int> ExecuteAsync() {
         return Table.Connection.ExecuteAsync(GetCommand(), Parameters);
     }
-    /// <inheritdoc cref="SqliteConnection.ExecuteQueryScalars{T}(string, IEnumerable{object?})"/>
-    public IEnumerable<TScalar> Get<TScalar>() {
-        return Table.Connection.ExecuteQueryScalars<TScalar>(GetCommand(), Parameters);
+    /// <inheritdoc cref="SqliteConnection.ExecuteScalar{T}(string, IEnumerable{object?})"/>
+    public IEnumerable<TScalar> ExecuteScalars<TScalar>() {
+        return Table.Connection.ExecuteScalars<TScalar>(GetCommand(), Parameters);
     }
-    /// <inheritdoc cref="SqliteConnection.ExecuteQueryScalarsAsync{T}(string, IDictionary{string, object?})"/>
-    public Task<IEnumerable<TScalar>> GetAsync<TScalar>() {
-        return Table.Connection.ExecuteQueryScalarsAsync<TScalar>(GetCommand(), Parameters);
+    /// <inheritdoc cref="SqliteConnection.ExecuteScalarsAsync{T}(string, IDictionary{string, object?})"/>
+    public Task<IEnumerable<TScalar>> ExecuteScalarsAsync<TScalar>() {
+        return Table.Connection.ExecuteScalarsAsync<TScalar>(GetCommand(), Parameters);
     }
     /// <inheritdoc cref="SqliteTable{T}.ExecuteQuery(string, IEnumerable{object?})"/>
-    public IEnumerable<T> Find() {
+    public IEnumerable<T> ExecuteQuery() {
         return Table.ExecuteQuery(GetCommand(), Parameters);
     }
     /// <inheritdoc cref="SqliteTable{T}.ExecuteQueryAsync(string, IEnumerable{object?})"/>
-    public IAsyncEnumerable<T> FindAsync() {
+    public IAsyncEnumerable<T> ExecuteQueryAsync() {
         return Table.ExecuteQueryAsync(GetCommand(), Parameters);
     }
 
@@ -225,28 +212,12 @@ public class SqlBuilder<T>(SqliteTable<T> table) where T : notnull, new() {
         GroupBy(MemberExpressionToColumnName(column));
         return this;
     }
-    /*public SqlBuilder<T> Where(Expression<Func<T, bool>> predicate) {
+    public SqlBuilder<T> Where(Expression<Func<T, bool>> predicate) {
         Where(ExpressionToSql(predicate.Body, predicate.Parameters[0]));
-        return this;
-    }
-    public SqlBuilder<T> WhereIn(Expression<Func<T, bool>> predicate, IEnumerable values) {
-        WhereIn(ExpressionToSql(predicate.Body, predicate.Parameters[0]), values);
-        return this;
-    }
-    public SqlBuilder<T> WhereNotIn(Expression<Func<T, bool>> predicate, IEnumerable values) {
-        WhereIn(ExpressionToSql(predicate.Body, predicate.Parameters[0]), values, negate: true);
         return this;
     }
     public SqlBuilder<T> Having(Expression<Func<T, bool>> predicate) {
         Having(ExpressionToSql(predicate.Body, predicate.Parameters[0]));
-        return this;
-    }
-    public SqlBuilder<T> HavingIn(Expression<Func<T, bool>> predicate, IEnumerable values) {
-        HavingIn(ExpressionToSql(predicate.Body, predicate.Parameters[0]), values);
-        return this;
-    }
-    public SqlBuilder<T> HavingNotIn(Expression<Func<T, bool>> predicate, IEnumerable values) {
-        HavingIn(ExpressionToSql(predicate.Body, predicate.Parameters[0]), values, negate: true);
         return this;
     }
     public SqlBuilder<T> Update(Expression<Func<T, object?>> column, Expression<Func<T, object?>> newValueExpression) {
@@ -256,9 +227,9 @@ public class SqlBuilder<T>(SqliteTable<T> table) where T : notnull, new() {
     public SqlBuilder<T> Insert(Expression<Func<T, object?>> column, Expression<Func<T, object?>> valueExpression) {
         Insert(MemberExpressionToColumnName(column), ExpressionToSql(valueExpression.Body, valueExpression.Parameters[0]));
         return this;
-    }*/
+    }
 
-    /*public static string OperatorToSql(ExpressionType operatorType) => operatorType switch {
+    public static string OperatorToSql(ExpressionType operatorType) => operatorType switch {
         ExpressionType.GreaterThan => ">",
         ExpressionType.GreaterThanOrEqual => ">=",
         ExpressionType.LessThan => "<",
@@ -278,16 +249,16 @@ public class SqlBuilder<T>(SqliteTable<T> table) where T : notnull, new() {
         ExpressionType.LeftShift => "<<",
         ExpressionType.RightShift => ">>",
         _ => throw new NotSupportedException($"Cannot get SQL operator for {operatorType}")
-    };*/
-    /*public static string LikeToSql(string expression, LikeMethod method) {
-        return method switch {
-            LikeMethod.Equals => $"{expression}",
-            LikeMethod.StartsWith => $"{expression}%",
-            LikeMethod.EndsWith => $"%{expression}",
-            LikeMethod.Contains => $"%{expression}%",
-            _ => throw new NotImplementedException($"{method}")
-        };
-    }*/
+    };
+    public static string StringComparisonToCollation(StringComparison stringComparison) => stringComparison switch {
+        StringComparison.Ordinal => Collation.Binary,
+        StringComparison.OrdinalIgnoreCase => Collation.NoCase,
+        StringComparison.InvariantCulture
+        or StringComparison.CurrentCulture => Collation.Invariant,
+        StringComparison.InvariantCultureIgnoreCase
+        or StringComparison.CurrentCultureIgnoreCase => Collation.InvariantNoCase,
+        _ => throw new NotImplementedException($"{stringComparison.GetType()}")
+    };
 
     public string GenerateParameterName() {
         CurrentParameterIndex++;
@@ -299,7 +270,13 @@ public class SqlBuilder<T>(SqliteTable<T> table) where T : notnull, new() {
         return name;
     }
 
-    /*private string ExpressionToSql(Expression expression, ParameterExpression rowExpression) {
+    private string MemberExpressionToColumnName(LambdaExpression expression) {
+        if (expression.Body is not MemberExpression memberExpression) {
+            throw new ArgumentException("Expected member expression");
+        }
+        return Table.MemberNameToColumnName(memberExpression.Member.Name);
+    }
+    private string ExpressionToSql(Expression expression, ParameterExpression rowExpression) {
         switch (expression) {
             // Constant (3)
             case ConstantExpression constantExpression:
@@ -321,6 +298,7 @@ public class SqlBuilder<T>(SqliteTable<T> table) where T : notnull, new() {
                 if (TryConvertMethodCallToSql(methodCallExpression, out string? methodSql)) {
                     return methodSql;
                 }
+                // Executing the method will fail if it references the row parameter.
                 return AddParameter(methodCallExpression.Execute());
 
             // Condition (a ? b : c)
@@ -333,7 +311,7 @@ public class SqlBuilder<T>(SqliteTable<T> table) where T : notnull, new() {
 
             // Member
             case MemberExpression memberExpression:
-                if (TryConvertUnrelatedMemberToSql(memberExpression, rowExpression, out string? memberSql)) {
+                if (TryConvertNonColumnMemberToSql(memberExpression, rowExpression, out string? memberSql)) {
                     return memberSql;
                 }
                 string columnName = Table.MemberNameToColumnName(memberExpression.Member.Name);
@@ -343,14 +321,8 @@ public class SqlBuilder<T>(SqliteTable<T> table) where T : notnull, new() {
             default:
                 throw new NotSupportedException($"{expression.GetType()}");
         }
-    }*/
-    private string MemberExpressionToColumnName(LambdaExpression expression) {
-        if (expression.Body is not MemberExpression memberExpression) {
-            throw new ArgumentException("Expected member expression");
-        }
-        return Table.MemberNameToColumnName(memberExpression.Member.Name);
     }
-    /*/// <summary>
+    /// <summary>
     /// Convert (a == null) to "a is null" because "null = null" is false.
     /// </summary>
     private bool TryConvertEqualsNullToIsNull(BinaryExpression binaryExpression, ParameterExpression rowExpression, [NotNullWhen(true)] out string? result) {
@@ -374,19 +346,68 @@ public class SqlBuilder<T>(SqliteTable<T> table) where T : notnull, new() {
         result = $"{ExpressionToSql(nonNullExpression, rowExpression)} is {(binaryExpression.NodeType is ExpressionType.NotEqual ? "not" : "")} null";
         return true;
     }
-    private bool TryConvertMethodCallToSql(MethodCallExpression methodCallExpression, [NotNullWhen(true)] out string? result) {
-        result = null;
-        return false;
-    }
-    private bool TryConvertUnrelatedMemberToSql(MemberExpression memberExpression, ParameterExpression rowExpression, [NotNullWhen(true)] out string? result) {
+    private bool TryConvertNonColumnMemberToSql(MemberExpression memberExpression, ParameterExpression rowExpression, [NotNullWhen(true)] out string? result) {
+        // Member is a column of mapped row
         if (memberExpression.Expression == rowExpression) {
             result = null;
             return false;
         }
+        // Member is unrelated to mapped row
         result = AddParameter(memberExpression.Execute());
         return true;
-    }*/
+    }
+    private bool TryConvertMethodCallToSql(MethodCallExpression methodCallExpression, [NotNullWhen(true)] out string? result) {
+        // Found method to SQL converter
+        if (MethodToSqlConverters.TryGetValue(methodCallExpression.Method, out MethodToSqlConverter<T>? methodToSqlConverter)) {
+            result = methodToSqlConverter.Invoke(methodCallExpression);
+            return true;
+        }
+        // Method call not recognised
+        result = null;
+        return false;
+    }
+    private void AddDefaultMethodToSqlConverters() {
+        // string.Equals(string, string)
+        MethodToSqlConverters.Add(typeof(string).GetMethod(nameof(string.Equals), [typeof(string), typeof(string)])!, methodCall => {
+            string? str1 = (string?)methodCall.Arguments[0].Execute();
+            string? str2 = (string?)methodCall.Arguments[1].Execute();
+
+            return $"{AddParameter(str1)} = {AddParameter(str2)}";
+        });
+
+        // string.Equals(string)
+        MethodToSqlConverters.Add(typeof(string).GetMethod(nameof(string.Equals), [typeof(string)])!, methodCall => {
+            string? str1 = (string?)methodCall.Object.Execute();
+            string? str2 = (string?)methodCall.Arguments[0].Execute();
+
+            return $"{AddParameter(str1)} = {AddParameter(str2)}";
+        });
+
+        // string.Equals(string, string, StringComparison)
+        MethodToSqlConverters.Add(typeof(string).GetMethod(nameof(string.Equals), [typeof(string), typeof(string), typeof(StringComparison)])!, methodCall => {
+            string? str1 = (string?)methodCall.Arguments[0].Execute();
+            string? str2 = (string?)methodCall.Arguments[1].Execute();
+            StringComparison strComparison = (StringComparison)methodCall.Arguments[2].Execute()!;
+
+            return $"{AddParameter(str1)} = {AddParameter(str2)} collate {StringComparisonToCollation(strComparison).SqlQuote()}";
+        });
+
+        // string.Equals(string, StringComparison)
+        MethodToSqlConverters.Add(typeof(string).GetMethod(nameof(string.Equals), [typeof(string), typeof(StringComparison)])!, methodCall => {
+            string? str1 = (string?)methodCall.Object.Execute();
+            string? str2 = (string?)methodCall.Arguments[0].Execute();
+            StringComparison strComparison = (StringComparison)methodCall.Arguments[1].Execute()!;
+
+            return $"{AddParameter(str1)} = {AddParameter(str2)} collate {StringComparisonToCollation(strComparison).SqlQuote()}";
+        });
+    }
 }
+
+/// <summary>
+/// A method that converts a <see cref="MethodCallExpression"/> to raw SQL.<br/>
+/// To create parameters, use <see cref="SqlBuilder{T}.AddParameter(object?)"/>.
+/// </summary>
+public delegate string MethodToSqlConverter<T>(MethodCallExpression methodCall) where T : notnull, new();
 
 /// <summary>
 /// SQL aggregate functions (e.g. <c>SELECT COUNT(*)</c>)<br/>
@@ -400,27 +421,3 @@ public enum SelectType {
     Sum,
     Total,
 }
-
-/*public enum LikeMethod {
-    StartsWith,
-    EndsWith,
-    Contains,
-    Equals,
-}*/
-
-/*public abstract class UpdateResolver<T> where T : notnull, new() {
-    public abstract MethodInfo Method { get; }
-    public abstract Action<SqlBuilder2<T>, MethodCallExpression, object?[]> Resolve { get; }
-}
-public class StringReplaceResolver : UpdateResolver {
-    public override MethodInfo Method {
-        get => typeof(string).GetMethod(nameof(string.Replace), [typeof(string), typeof(string)])!;
-    }
-    public override void Resolve(SqlBuilder builder, MethodCallExpression callExpression, object?[] arguments) {
-        if (arguments.Length != 2) {
-            throw new ArgumentException($"REPLACE query requires 2 arguments for replacing old_string with new_string");
-        }
-        string columnName = LambdaResolver.GetColumnName(callExpression.Object!);
-        builder.UpdateColumnReplaceString(columnName, arguments[0], arguments[1]);
-    }
-}*/
