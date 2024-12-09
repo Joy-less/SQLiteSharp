@@ -206,7 +206,7 @@ public class Orm {
         RegisterType<char>(
             SqliteType.Integer,
             serialize: (char clr) => clr,
-            deserialize: (SqliteValue sqlite, Type clrType) => sqlite.AsInteger
+            deserialize: (SqliteValue sqlite, Type clrType) => (char)sqlite.AsInteger
         );
         RegisterType<float>(
             SqliteType.Integer,
@@ -241,7 +241,7 @@ public class Orm {
         RegisterType<IEnumerable<byte>>(
             SqliteType.Blob,
             serialize: (IEnumerable<byte> clr) => clr.ToArray(),
-            deserialize: (SqliteValue sqlite, Type clrType) => sqlite.AsBlob.ToList()
+            deserialize: (SqliteValue sqlite, Type clrType) => sqlite.AsBlob
         );
         RegisterType<Enum>(
             SqliteType.Integer,
@@ -256,7 +256,7 @@ public class Orm {
         RegisterType<Guid>(
             SqliteType.Text,
             serialize: (Guid clr) => clr.ToString(),
-            deserialize: (SqliteValue sqlite, Type clrType) => sqlite.AsText
+            deserialize: (SqliteValue sqlite, Type clrType) => Guid.Parse(sqlite.AsText)
         );
     }
 }
