@@ -48,10 +48,12 @@ public partial class SqliteConnection : IDisposable {
         foreach (KeyValuePair<string, Func<string, string, int>> collation in options.Collations) {
             CreateCollation(collation.Key, collation.Value);
         }
+
+        // Enable/disable foreign key support
+        Execute($"pragma foreign_keys = {(options.EnableForeignKeys ? "ON" : "OFF")};");
     }
     /// <inheritdoc cref="SqliteConnection(SqliteConnectionOptions)"/>
-    public SqliteConnection(string databasePath, OpenFlags openFlags = OpenFlags.Recommended)
-        : this(new SqliteConnectionOptions(databasePath, openFlags)) {
+    public SqliteConnection(string databasePath) : this(new SqliteConnectionOptions(databasePath)) {
     }
 
     /// <summary>

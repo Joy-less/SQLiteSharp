@@ -33,10 +33,24 @@ public class PrimaryKeyAttribute() : Attribute {
 }
 
 /// <summary>
-/// The column will be automatically incremented from the last value when inserting in the table.
+/// The column will be designated as a foreign key (ID) for another table.
 /// </summary>
 [AttributeUsage(AttributeTargets.Property | AttributeTargets.Field)]
-public class AutoIncrementAttribute() : Attribute {
+public class ForeignKeyAttribute(string foreignTable, string foreignColumn) : Attribute {
+    /// <summary>
+    /// The name of the foreign table.
+    /// </summary>
+    public string ForeignTable { get; set; } = foreignTable;
+    /// <summary>
+    /// The name of the column in the foreign table.
+    /// </summary>
+    public string ForeignColumn { get; set; } = foreignColumn;
+    /// <summary>
+    /// The action to complete when the foreign key is changed.
+    /// </summary>
+    public ForeignKeyAction OnDelete { get; set; } = ForeignKeyAction.NoAction;
+    /// <inheritdoc cref="OnDelete"/>
+    public ForeignKeyAction OnUpdate { get; set; } = ForeignKeyAction.NoAction;
 }
 
 /// <summary>
@@ -55,6 +69,13 @@ public class IndexAttribute(string? name = null) : Attribute {
     /// If <see langword="true"/>, every row must have a unique value for this index.
     /// </summary>
     public bool Unique { get; set; }
+}
+
+/// <summary>
+/// The column will be automatically incremented from the last value when inserting in the table.
+/// </summary>
+[AttributeUsage(AttributeTargets.Property | AttributeTargets.Field)]
+public class AutoIncrementAttribute() : Attribute {
 }
 
 /// <summary>

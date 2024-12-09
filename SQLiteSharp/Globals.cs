@@ -5,6 +5,7 @@ global using Sqlite3Statement = SQLitePCL.sqlite3_stmt;
 
 using System.Linq.Expressions;
 using System.Reflection;
+using System.Runtime.Serialization;
 
 namespace SQLiteSharp;
 
@@ -63,5 +64,13 @@ public static class Globals {
         else {
             return Expression.Lambda(expression).Compile().DynamicInvoke();
         }
+    }
+    /// <summary>
+    /// Converts the enum to a string using <see cref="EnumMemberAttribute"/> if present.
+    /// </summary>
+    public static string ToEnumString(this Enum @enum) {
+        string enumName = @enum.ToString();
+        string? enumMemberName = @enum.GetType().GetField(enumName)?.GetCustomAttribute<EnumMemberAttribute>()?.Value;
+        return enumMemberName ?? @enum.ToString();
     }
 }

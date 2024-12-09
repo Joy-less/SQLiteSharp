@@ -31,13 +31,17 @@ public class SqliteColumn {
     /// </summary>
     public string? Check { get; }
     /// <summary>
-    /// Whether the column is automatically incremented on insert.
-    /// </summary>
-    public bool IsAutoIncremented { get; }
-    /// <summary>
     /// Whether the column is the primary key of the table.
     /// </summary>
     public bool IsPrimaryKey { get; }
+    /// <summary>
+    /// The foreign key reference for the column.
+    /// </summary>
+    public ForeignKeyAttribute? ForeignKey { get; }
+    /// <summary>
+    /// Whether the column is automatically incremented on insert.
+    /// </summary>
+    public bool IsAutoIncremented { get; }
     /// <summary>
     /// Whether the column value is required to be non-null.
     /// </summary>
@@ -66,18 +70,20 @@ public class SqliteColumn {
         IsPrimaryKey = member.GetCustomAttribute<PrimaryKeyAttribute>() is not null
             || Connection.Orm.IsImplicitPrimaryKey(member);
 
+        ForeignKey = member.GetCustomAttribute<ForeignKeyAttribute>();
+
         IsAutoIncremented = member.GetCustomAttribute<AutoIncrementAttribute>() is not null
             || Connection.Orm.IsImplicitAutoIncremented(member);
+
+        IsNotNull = member.GetCustomAttribute<NotNullAttribute>() is not null
+            || IsPrimaryKey;
+
+        IsUnique = member.GetCustomAttribute<UniqueAttribute>() is not null;
 
         Indexes = [.. member.GetCustomAttributes<IndexAttribute>()];
         if (Indexes.Length == 0 && Connection.Orm.IsImplicitIndex(member)) {
             Indexes = [new IndexAttribute()];
         }
-
-        IsUnique = member.GetCustomAttribute<UniqueAttribute>() is not null;
-
-        IsNotNull = member.GetCustomAttribute<NotNullAttribute>() is not null
-            || IsPrimaryKey;
     }
 
     /// <summary>
