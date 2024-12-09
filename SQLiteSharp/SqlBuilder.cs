@@ -23,11 +23,11 @@ public class SqlBuilder<T> where T : notnull, new() {
     /// <summary>
     /// Functions to convert CLR methods to SQL expressions.
     /// </summary>
-    public Dictionary<MethodInfo, Func<MethodCallExpression, string>> MethodToSqlConverters { get; } = [];
+    public Dictionary<MethodInfo, Func<MethodCallExpression, ParameterExpression, string>> MethodToSqlConverters { get; } = [];
     /// <summary>
     /// Functions to convert CLR properties/fields to SQL expressions.
     /// </summary>
-    public Dictionary<MemberInfo, Func<MemberExpression, string>> MemberToSqlConverters { get; } = [];
+    public Dictionary<MemberInfo, Func<MemberExpression, ParameterExpression, string>> MemberToSqlConverters { get; } = [];
 
     private readonly List<string> SelectList = [];
     private readonly List<string> OrderByList = [];
@@ -304,6 +304,7 @@ public class SqlBuilder<T> where T : notnull, new() {
     /// Converts the CLR operator to a SQL operator.
     /// </summary>
     public static string OperatorToSql(ExpressionType operatorType) => operatorType switch {
+        ExpressionType.Not => "not",
         ExpressionType.GreaterThan => ">",
         ExpressionType.GreaterThanOrEqual => ">=",
         ExpressionType.LessThan => "<",
@@ -356,7 +357,7 @@ public class SqlBuilder<T> where T : notnull, new() {
     /// <summary>
     /// Converts a member (property/field) expression to the name of a column in the table.
     /// </summary>
-    private string MemberExpressionToColumnName(LambdaExpression expression) {
+    public string MemberExpressionToColumnName(LambdaExpression expression) {
         if (expression.Body is not MemberExpression memberExpression) {
             throw new ArgumentException("Expected member expression");
         }
@@ -368,7 +369,7 @@ public class SqlBuilder<T> where T : notnull, new() {
     /// <param name="rowExpression">
     /// The row parameter (e.g. the <c>player</c> in <c>(player => player.name)</c>).
     /// </param>
-    private string ExpressionToSql(Expression expression, ParameterExpression rowExpression) {
+    public string ExpressionToSql(Expression expression, ParameterExpression rowExpression) {
         switch (expression) {
             // Constant (3)
             case ConstantExpression constantExpression:
@@ -387,6 +388,9 @@ public class SqlBuilder<T> where T : notnull, new() {
                 if (TryConvertEqualsNullToIsNull(binaryExpression, rowExpression, out string? isNullSql)) {
                     return isNullSql;
                 }
+                if (binaryExpression.NodeType is ExpressionType.Coalesce) {
+                    return $"coalesce({ExpressionToSql(binaryExpression.Left, rowExpression)}, {ExpressionToSql(binaryExpression.Right, rowExpression)})";
+                }
                 return $"({ExpressionToSql(binaryExpression.Left, rowExpression)} {OperatorToSql(binaryExpression.NodeType)} {ExpressionToSql(binaryExpression.Right, rowExpression)})";
 
             // Condition (a ? b : c)
@@ -395,7 +399,7 @@ public class SqlBuilder<T> where T : notnull, new() {
 
             // Method Call (a.b())
             case MethodCallExpression methodCallExpression:
-                return $"({ConvertMethodCallToSql(methodCallExpression)})";
+                return $"({ConvertMethodCallToSql(methodCallExpression, rowExpression)})";
 
             // Member (a.b)
             case MemberExpression memberExpression:
@@ -406,6 +410,7 @@ public class SqlBuilder<T> where T : notnull, new() {
                 throw new NotSupportedException($"{expression.GetType()}");
         }
     }
+
     /// <summary>
     /// Converts (a == null) to "a is null" because "null = null" is false.
     /// </summary>
@@ -437,221 +442,220 @@ public class SqlBuilder<T> where T : notnull, new() {
             return $"{Table.Name.SqlQuote()}.{columnName.SqlQuote()}";
         }
         // Member has SQL converter
-        if (MemberToSqlConverters.TryGetValue(memberExpression.Member, out Func<MemberExpression, string>? memberToSqlConverter)) {
-            return memberToSqlConverter.Invoke(memberExpression);
+        if (MemberToSqlConverters.TryGetValue(memberExpression.Member, out Func<MemberExpression, ParameterExpression, string>? memberToSqlConverter)) {
+            return memberToSqlConverter.Invoke(memberExpression, rowExpression);
         }
         // Member not recognised
         return AddParameter(memberExpression.Execute());
     }
-    private string ConvertMethodCallToSql(MethodCallExpression methodCallExpression) {
+    private string ConvertMethodCallToSql(MethodCallExpression methodCallExpression, ParameterExpression rowExpression) {
         // Method has SQL converter
-        if (MethodToSqlConverters.TryGetValue(methodCallExpression.Method, out Func<MethodCallExpression, string>? methodToSqlConverter)) {
-            return methodToSqlConverter.Invoke(methodCallExpression);
+        if (MethodToSqlConverters.TryGetValue(methodCallExpression.Method, out Func<MethodCallExpression, ParameterExpression, string>? methodToSqlConverter)) {
+            return methodToSqlConverter.Invoke(methodCallExpression, rowExpression);
         }
         // Method call not recognised
         return AddParameter(methodCallExpression.Execute());
     }
     private void AddDefaultSqlConverters() {
         // string.Equals(string, string)
-        MethodToSqlConverters.Add(typeof(string).GetMethod(nameof(string.Equals), [typeof(string), typeof(string)])!, methodCall => {
-            string? str1 = (string?)methodCall.Arguments[0].Execute();
-            string? str2 = (string?)methodCall.Arguments[1].Execute();
-            return $"{AddParameter(str1)} = {AddParameter(str2)}";
+        MethodToSqlConverters.Add(typeof(string).GetMethod(nameof(string.Equals), [typeof(string), typeof(string)])!, (methodCall, rowExpression) => {
+            string str1Sql = ExpressionToSql(methodCall.Arguments[0], rowExpression);
+            string str2Sql = ExpressionToSql(methodCall.Arguments[1], rowExpression);
+            return $"{str1Sql} = {str2Sql}";
         });
 
         // string.Equals(string)
-        MethodToSqlConverters.Add(typeof(string).GetMethod(nameof(string.Equals), [typeof(string)])!, methodCall => {
-            string str1 = (string)methodCall.Object.Execute()!;
-            string? str2 = (string?)methodCall.Arguments[0].Execute();
-            return $"{AddParameter(str1)} = {AddParameter(str2)}";
+        MethodToSqlConverters.Add(typeof(string).GetMethod(nameof(string.Equals), [typeof(string)])!, (methodCall, rowExpression) => {
+            string str1Sql = ExpressionToSql(methodCall.Object!, rowExpression);
+            string str2Sql = ExpressionToSql(methodCall.Arguments[0], rowExpression);
+            return $"{str1Sql} = {str2Sql}";
         });
 
         // string.Equals(string, string, StringComparison)
-        MethodToSqlConverters.Add(typeof(string).GetMethod(nameof(string.Equals), [typeof(string), typeof(string), typeof(StringComparison)])!, methodCall => {
-            string? str1 = (string?)methodCall.Arguments[0].Execute();
-            string? str2 = (string?)methodCall.Arguments[1].Execute();
+        MethodToSqlConverters.Add(typeof(string).GetMethod(nameof(string.Equals), [typeof(string), typeof(string), typeof(StringComparison)])!, (methodCall, rowExpression) => {
+            string str1Sql = ExpressionToSql(methodCall.Arguments[0], rowExpression);
+            string str2Sql = ExpressionToSql(methodCall.Arguments[1], rowExpression);
             StringComparison strComparison = (StringComparison)methodCall.Arguments[2].Execute()!;
-            return $"{AddParameter(str1)} = {AddParameter(str2)} collate {StringComparisonToCollation(strComparison).SqlQuote()}";
+            return $"{str1Sql} = {str2Sql} collate {StringComparisonToCollation(strComparison).SqlQuote()}";
         });
 
         // string.Equals(string, StringComparison)
-        MethodToSqlConverters.Add(typeof(string).GetMethod(nameof(string.Equals), [typeof(string), typeof(StringComparison)])!, methodCall => {
-            string str1 = (string)methodCall.Object.Execute()!;
-            string? str2 = (string?)methodCall.Arguments[0].Execute();
+        MethodToSqlConverters.Add(typeof(string).GetMethod(nameof(string.Equals), [typeof(string), typeof(StringComparison)])!, (methodCall, rowExpression) => {
+            string str1Sql = ExpressionToSql(methodCall.Object!, rowExpression);
+            string str2Sql = ExpressionToSql(methodCall.Arguments[0], rowExpression);
             StringComparison strComparison = (StringComparison)methodCall.Arguments[1].Execute()!;
-            return $"{AddParameter(str1)} = {AddParameter(str2)} collate {StringComparisonToCollation(strComparison).SqlQuote()}";
+            return $"{str1Sql} = {str2Sql} collate {StringComparisonToCollation(strComparison).SqlQuote()}";
         });
 
         // string.Contains(string)
-        MethodToSqlConverters.Add(typeof(string).GetMethod(nameof(string.Contains), [typeof(string)])!, methodCall => {
-            string str = (string)methodCall.Object.Execute()!;
+        MethodToSqlConverters.Add(typeof(string).GetMethod(nameof(string.Contains), [typeof(string)])!, (methodCall, rowExpression) => {
+            string strSql = ExpressionToSql(methodCall.Object!, rowExpression);
             string? subStr = (string?)methodCall.Arguments[0].Execute();
-            return $"{AddParameter(str)} like {AddParameter("%" + subStr + "%")} escape '\\'";
+            return $"{strSql} like {AddParameter("%" + subStr + "%")} escape '\\'";
         });
 
         // string.StartsWith(string)
-        MethodToSqlConverters.Add(typeof(string).GetMethod(nameof(string.StartsWith), [typeof(string)])!, methodCall => {
-            string str = (string)methodCall.Object.Execute()!;
+        MethodToSqlConverters.Add(typeof(string).GetMethod(nameof(string.StartsWith), [typeof(string)])!, (methodCall, rowExpression) => {
+            string strSql = ExpressionToSql(methodCall.Object!, rowExpression);
             string? subStr = (string?)methodCall.Arguments[0].Execute();
-            return $"{AddParameter(str)} like {AddParameter(subStr + "%")} escape '\\'";
+            return $"{strSql} like {AddParameter(subStr + "%")} escape '\\'";
         });
 
         // string.EndsWith(string)
-        MethodToSqlConverters.Add(typeof(string).GetMethod(nameof(string.EndsWith), [typeof(string)])!, methodCall => {
-            string str = (string)methodCall.Object.Execute()!;
+        MethodToSqlConverters.Add(typeof(string).GetMethod(nameof(string.EndsWith), [typeof(string)])!, (methodCall, rowExpression) => {
+            string strSql = ExpressionToSql(methodCall.Object!, rowExpression);
             string? subStr = (string?)methodCall.Arguments[0].Execute();
-            return $"{AddParameter(str)} like {AddParameter("%" + subStr)} escape '\\'";
+            return $"{strSql} like {AddParameter("%" + subStr)} escape '\\'";
         });
 
         // string.Replace(string, string)
-        MethodToSqlConverters.Add(typeof(string).GetMethod(nameof(string.Replace), [typeof(string), typeof(string)])!, methodCall => {
-            string str = (string)methodCall.Object.Execute()!;
-            string? oldSubStr = (string?)methodCall.Arguments[0].Execute();
-            string? newSubStr = (string?)methodCall.Arguments[1].Execute();
-            return $"replace({AddParameter(str)}, {AddParameter(oldSubStr)}, {AddParameter(newSubStr)})";
+        MethodToSqlConverters.Add(typeof(string).GetMethod(nameof(string.Replace), [typeof(string), typeof(string)])!, (methodCall, rowExpression) => {
+            string strSql = ExpressionToSql(methodCall.Object!, rowExpression);
+            string oldSubStrSql = ExpressionToSql(methodCall.Arguments[0], rowExpression);
+            string newSubStrSql = ExpressionToSql(methodCall.Arguments[1], rowExpression);
+            return $"replace({strSql}, {oldSubStrSql}, {newSubStrSql})";
         });
 
         // string.Substring(int, int)
-        MethodToSqlConverters.Add(typeof(string).GetMethod(nameof(string.Substring), [typeof(int), typeof(int)])!, methodCall => {
-            string str = (string)methodCall.Object.Execute()!;
-            int startIndex = (int)methodCall.Arguments[0].Execute()!;
-            int length = (int)methodCall.Arguments[1].Execute()!;
-            return $"substr({AddParameter(str)}, {AddParameter(startIndex)}, {AddParameter(length)})";
+        MethodToSqlConverters.Add(typeof(string).GetMethod(nameof(string.Substring), [typeof(int), typeof(int)])!, (methodCall, rowExpression) => {
+            string strSql = ExpressionToSql(methodCall.Object!, rowExpression);
+            string startIndexSql = ExpressionToSql(methodCall.Arguments[0], rowExpression);
+            string lengthSql = ExpressionToSql(methodCall.Arguments[1], rowExpression);
+            return $"substr({strSql}, {startIndexSql}, {lengthSql})";
         });
 
         // string.Substring(int)
-        MethodToSqlConverters.Add(typeof(string).GetMethod(nameof(string.Substring), [typeof(int)])!, methodCall => {
-            string str = (string)methodCall.Object.Execute()!;
-            int startIndex = (int)methodCall.Arguments[0].Execute()!;
-            return $"substr({AddParameter(str)}, {AddParameter(startIndex)})";
+        MethodToSqlConverters.Add(typeof(string).GetMethod(nameof(string.Substring), [typeof(int)])!, (methodCall, rowExpression) => {
+            string strSql = ExpressionToSql(methodCall.Object!, rowExpression);
+            string startIndexSql = ExpressionToSql(methodCall.Arguments[0], rowExpression);
+            return $"substr({strSql}, {startIndexSql})";
         });
 
         // string.Length
-        MemberToSqlConverters.Add(typeof(string).GetProperty(nameof(string.Length))!, member => {
-            string str = (string)member.Expression.Execute()!;
-            return $"length({AddParameter(str)})";
+        MemberToSqlConverters.Add(typeof(string).GetProperty(nameof(string.Length))!, (member, rowExpression) => {
+            string strSql = ExpressionToSql(member.Expression!, rowExpression);
+            return $"length({strSql})";
         });
 
         // string.ToLower()
-        MethodToSqlConverters.Add(typeof(string).GetMethod(nameof(string.ToLower), [])!, methodCall => {
-            string str = (string)methodCall.Object.Execute()!;
-            return $"lower({AddParameter(str)})";
+        MethodToSqlConverters.Add(typeof(string).GetMethod(nameof(string.ToLower), [])!, (methodCall, rowExpression) => {
+            string strSql = ExpressionToSql(methodCall.Object!, rowExpression);
+            return $"lower({strSql})";
         });
 
         // string.ToUpper()
-        MethodToSqlConverters.Add(typeof(string).GetMethod(nameof(string.ToUpper), [])!, methodCall => {
-            string str = (string)methodCall.Object.Execute()!;
-            return $"upper({AddParameter(str)})";
+        MethodToSqlConverters.Add(typeof(string).GetMethod(nameof(string.ToUpper), [])!, (methodCall, rowExpression) => {
+            string strSql = ExpressionToSql(methodCall.Object!, rowExpression);
+            return $"upper({strSql})";
         });
 
         // string.IsNullOrEmpty(string)
-        MethodToSqlConverters.Add(typeof(string).GetMethod(nameof(string.IsNullOrEmpty), [typeof(string)])!, methodCall => {
-            string? str = (string?)methodCall.Arguments[0].Execute();
-            string parameter = AddParameter(str);
-            return $"({parameter} is null or {parameter} = '')";
+        MethodToSqlConverters.Add(typeof(string).GetMethod(nameof(string.IsNullOrEmpty), [typeof(string)])!, (methodCall, rowExpression) => {
+            string strSql = ExpressionToSql(methodCall.Arguments[0], rowExpression);
+            return $"({strSql} is null or {strSql} = '')";
         });
 
         // string.Trim()
-        MethodToSqlConverters.Add(typeof(string).GetMethod(nameof(string.Trim), [])!, methodCall => {
-            string str = (string)methodCall.Object.Execute()!;
-            return $"trim({AddParameter(str)})";
+        MethodToSqlConverters.Add(typeof(string).GetMethod(nameof(string.Trim), [])!, (methodCall, rowExpression) => {
+            string strSql = ExpressionToSql(methodCall.Object!, rowExpression);
+            return $"trim({strSql})";
         });
 
         // string.TrimStart()
-        MethodToSqlConverters.Add(typeof(string).GetMethod(nameof(string.TrimStart), [])!, methodCall => {
-            string str = (string)methodCall.Object.Execute()!;
-            return $"ltrim({AddParameter(str)})";
+        MethodToSqlConverters.Add(typeof(string).GetMethod(nameof(string.TrimStart), [])!, (methodCall, rowExpression) => {
+            string strSql = ExpressionToSql(methodCall.Object!, rowExpression);
+            return $"ltrim({strSql})";
         });
 
         // string.TrimEnd()
-        MethodToSqlConverters.Add(typeof(string).GetMethod(nameof(string.TrimEnd), [])!, methodCall => {
-            string str = (string)methodCall.Object.Execute()!;
-            return $"rtrim({AddParameter(str)})";
+        MethodToSqlConverters.Add(typeof(string).GetMethod(nameof(string.TrimEnd), [])!, (methodCall, rowExpression) => {
+            string strSql = ExpressionToSql(methodCall.Object!, rowExpression);
+            return $"rtrim({strSql})";
         });
 
         // Math.Abs(double)
-        MethodToSqlConverters.Add(typeof(Math).GetMethod(nameof(Math.Abs), [typeof(double)])!, methodCall => {
-            double value = (double)methodCall.Arguments[0].Execute()!;
-            return $"abs({AddParameter(value)})";
+        MethodToSqlConverters.Add(typeof(Math).GetMethod(nameof(Math.Abs), [typeof(double)])!, (methodCall, rowExpression) => {
+            string valueSql = ExpressionToSql(methodCall.Arguments[0], rowExpression);
+            return $"abs({valueSql})";
         });
 
         // Math.Round(double)
-        MethodToSqlConverters.Add(typeof(Math).GetMethod(nameof(Math.Round), [typeof(double)])!, methodCall => {
-            double value = (double)methodCall.Arguments[0].Execute()!;
-            return $"round({AddParameter(value)})";
+        MethodToSqlConverters.Add(typeof(Math).GetMethod(nameof(Math.Round), [typeof(double)])!, (methodCall, rowExpression) => {
+            string valueSql = ExpressionToSql(methodCall.Arguments[0], rowExpression);
+            return $"round({valueSql})";
         });
 
         // Math.Ceiling(double)
-        MethodToSqlConverters.Add(typeof(Math).GetMethod(nameof(Math.Ceiling), [typeof(double)])!, methodCall => {
-            double value = (double)methodCall.Arguments[0].Execute()!;
-            return $"ceil({AddParameter(value)})";
+        MethodToSqlConverters.Add(typeof(Math).GetMethod(nameof(Math.Ceiling), [typeof(double)])!, (methodCall, rowExpression) => {
+            string valueSql = ExpressionToSql(methodCall.Arguments[0], rowExpression);
+            return $"ceil({valueSql})";
         });
 
         // Math.Floor(double)
-        MethodToSqlConverters.Add(typeof(Math).GetMethod(nameof(Math.Floor), [typeof(double)])!, methodCall => {
-            double value = (double)methodCall.Arguments[0].Execute()!;
-            return $"floor({AddParameter(value)})";
+        MethodToSqlConverters.Add(typeof(Math).GetMethod(nameof(Math.Floor), [typeof(double)])!, (methodCall, rowExpression) => {
+            string valueSql = ExpressionToSql(methodCall.Arguments[0], rowExpression);
+            return $"floor({valueSql})";
         });
 
         // Math.Exp(double)
-        MethodToSqlConverters.Add(typeof(Math).GetMethod(nameof(Math.Exp), [typeof(double)])!, methodCall => {
-            double value = (double)methodCall.Arguments[0].Execute()!;
-            return $"exp({AddParameter(value)})";
+        MethodToSqlConverters.Add(typeof(Math).GetMethod(nameof(Math.Exp), [typeof(double)])!, (methodCall, rowExpression) => {
+            string valueSql = ExpressionToSql(methodCall.Arguments[0], rowExpression);
+            return $"exp({valueSql})";
         });
 
         // Math.Log(double)
-        MethodToSqlConverters.Add(typeof(Math).GetMethod(nameof(Math.Log), [typeof(double)])!, methodCall => {
-            double value = (double)methodCall.Arguments[0].Execute()!;
-            return $"log({AddParameter(value)})";
+        MethodToSqlConverters.Add(typeof(Math).GetMethod(nameof(Math.Log), [typeof(double)])!, (methodCall, rowExpression) => {
+            string valueSql = ExpressionToSql(methodCall.Arguments[0], rowExpression);
+            return $"log({valueSql})";
         });
 
         // Math.Pow(double, double)
-        MethodToSqlConverters.Add(typeof(Math).GetMethod(nameof(Math.Pow), [typeof(double), typeof(double)])!, methodCall => {
-            double value = (double)methodCall.Arguments[0].Execute()!;
-            double exponent = (double)methodCall.Arguments[1].Execute()!;
-            return $"power({AddParameter(value)}, {AddParameter(exponent)})";
+        MethodToSqlConverters.Add(typeof(Math).GetMethod(nameof(Math.Pow), [typeof(double), typeof(double)])!, (methodCall, rowExpression) => {
+            string valueSql = ExpressionToSql(methodCall.Arguments[0], rowExpression);
+            string exponentSql = ExpressionToSql(methodCall.Arguments[1], rowExpression);
+            return $"power({valueSql}, {exponentSql})";
         });
 
         // Math.Sqrt(double)
-        MethodToSqlConverters.Add(typeof(Math).GetMethod(nameof(Math.Sqrt), [typeof(double)])!, methodCall => {
-            double value = (double)methodCall.Arguments[0].Execute()!;
-            return $"sqrt({AddParameter(value)})";
+        MethodToSqlConverters.Add(typeof(Math).GetMethod(nameof(Math.Sqrt), [typeof(double)])!, (methodCall, rowExpression) => {
+            string valueSql = ExpressionToSql(methodCall.Arguments[0], rowExpression);
+            return $"sqrt({valueSql})";
         });
 
         // Math.Sin(double)
-        MethodToSqlConverters.Add(typeof(Math).GetMethod(nameof(Math.Sin), [typeof(double)])!, methodCall => {
-            double value = (double)methodCall.Arguments[0].Execute()!;
-            return $"sin({AddParameter(value)})";
+        MethodToSqlConverters.Add(typeof(Math).GetMethod(nameof(Math.Sin), [typeof(double)])!, (methodCall, rowExpression) => {
+            string valueSql = ExpressionToSql(methodCall.Arguments[0], rowExpression);
+            return $"sin({valueSql})";
         });
 
         // Math.Cos(double)
-        MethodToSqlConverters.Add(typeof(Math).GetMethod(nameof(Math.Cos), [typeof(double)])!, methodCall => {
-            double value = (double)methodCall.Arguments[0].Execute()!;
-            return $"cos({AddParameter(value)})";
+        MethodToSqlConverters.Add(typeof(Math).GetMethod(nameof(Math.Cos), [typeof(double)])!, (methodCall, rowExpression) => {
+            string valueSql = ExpressionToSql(methodCall.Arguments[0], rowExpression);
+            return $"cos({valueSql})";
         });
 
         // Math.Tan(double)
-        MethodToSqlConverters.Add(typeof(Math).GetMethod(nameof(Math.Tan), [typeof(double)])!, methodCall => {
-            double value = (double)methodCall.Arguments[0].Execute()!;
-            return $"tan({AddParameter(value)})";
+        MethodToSqlConverters.Add(typeof(Math).GetMethod(nameof(Math.Tan), [typeof(double)])!, (methodCall, rowExpression) => {
+            string valueSql = ExpressionToSql(methodCall.Arguments[0], rowExpression);
+            return $"tan({valueSql})";
         });
 
         // Math.Asin(double)
-        MethodToSqlConverters.Add(typeof(Math).GetMethod(nameof(Math.Asin), [typeof(double)])!, methodCall => {
-            double value = (double)methodCall.Arguments[0].Execute()!;
-            return $"asin({AddParameter(value)})";
+        MethodToSqlConverters.Add(typeof(Math).GetMethod(nameof(Math.Asin), [typeof(double)])!, (methodCall, rowExpression) => {
+            string valueSql = ExpressionToSql(methodCall.Arguments[0], rowExpression);
+            return $"asin({valueSql})";
         });
 
         // Math.Acos(double)
-        MethodToSqlConverters.Add(typeof(Math).GetMethod(nameof(Math.Acos), [typeof(double)])!, methodCall => {
-            double value = (double)methodCall.Arguments[0].Execute()!;
-            return $"acos({AddParameter(value)})";
+        MethodToSqlConverters.Add(typeof(Math).GetMethod(nameof(Math.Acos), [typeof(double)])!, (methodCall, rowExpression) => {
+            string valueSql = ExpressionToSql(methodCall.Arguments[0], rowExpression);
+            return $"acos({valueSql})";
         });
 
         // Math.Atan(double)
-        MethodToSqlConverters.Add(typeof(Math).GetMethod(nameof(Math.Atan), [typeof(double)])!, methodCall => {
-            double value = (double)methodCall.Arguments[0].Execute()!;
-            return $"atan({AddParameter(value)})";
+        MethodToSqlConverters.Add(typeof(Math).GetMethod(nameof(Math.Atan), [typeof(double)])!, (methodCall, rowExpression) => {
+            string valueSql = ExpressionToSql(methodCall.Arguments[0], rowExpression);
+            return $"atan({valueSql})";
         });
     }
 }
