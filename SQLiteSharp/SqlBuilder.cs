@@ -363,9 +363,16 @@ public class SqlBuilder<T> where T : notnull, new() {
     /// Converts a member (property/field) expression to the name of a column in the table.
     /// </summary>
     public string MemberExpressionToColumnName(LambdaExpression expression) {
-        if (expression.Body is not MemberExpression memberExpression) {
+        Expression body = expression.Body;
+        // Unwrap type cast
+        if (body is UnaryExpression unaryExpression && unaryExpression.NodeType is ExpressionType.Convert) {
+            body = unaryExpression.Operand;
+        }
+        // Ensure body is member expression
+        if (body is not MemberExpression memberExpression) {
             throw new ArgumentException($"Expected MemberExpression, got '{expression.Body.GetType()}'");
         }
+        // Get column name from member name
         return Table.MemberNameToColumnName(memberExpression.Member.Name);
     }
     /// <summary>
