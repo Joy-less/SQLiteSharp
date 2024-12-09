@@ -18,9 +18,9 @@ public static class SqliteRaw {
         return Sqlite3.sqlite3_changes(db);
     }
     public static Sqlite3Statement Prepare(Sqlite3DatabaseHandle db, string query) {
-        int result = Sqlite3.sqlite3_prepare_v2(db, query, out Sqlite3Statement? statement);
-        if (result != 0) {
-            throw new SqliteException((Result)result, GetErrorMessage(db));
+        Result result = (Result)Sqlite3.sqlite3_prepare_v3(db, query, 0, out Sqlite3Statement? statement);
+        if (result is not Result.OK) {
+            throw new SqliteException(result, GetErrorMessage(db));
         }
         return statement;
     }
