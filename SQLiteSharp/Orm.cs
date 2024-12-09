@@ -139,7 +139,7 @@ public class Orm {
             declaration += $" check {column.Check.SqlQuote("'")}";
         }
         if (column.ForeignKey is not null) {
-            declaration += $" references {column.ForeignKey.ForeignTable.SqlQuote()}.{column.ForeignKey.ForeignColumn.SqlQuote()}"
+            declaration += $" references {column.ForeignKey.ForeignTable.SqlQuote()}({column.ForeignKey.ForeignColumn.SqlQuote()})"
                 + $" on delete {column.ForeignKey.OnDelete.ToEnumString()}"
                 + $" on update {column.ForeignKey.OnUpdate.ToEnumString()}";
         }
