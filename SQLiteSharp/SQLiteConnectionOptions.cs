@@ -30,7 +30,7 @@ public record struct SqliteConnectionOptions(string DatabasePath) {
     /// </summary>
     public Dictionary<string, Func<string, string, int>> Collations { get; set; } = new() {
         [Collation.Invariant] = (string str1, string str2) => string.Compare(str1, str2, StringComparison.InvariantCulture),
-        [Collation.Invariant_NoCase] = (string str1, string str2) => string.Compare(str1, str2, StringComparison.InvariantCultureIgnoreCase),
+        [Collation.InvariantNoCase] = (string str1, string str2) => string.Compare(str1, str2, StringComparison.InvariantCultureIgnoreCase),
     };
     /// <summary>
     /// Whether to enable foreign key constraints.<br/>
