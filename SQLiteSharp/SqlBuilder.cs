@@ -364,7 +364,7 @@ public class SqlBuilder<T> where T : notnull, new() {
     /// </summary>
     public string MemberExpressionToColumnName(LambdaExpression expression) {
         if (expression.Body is not MemberExpression memberExpression) {
-            throw new ArgumentException("Expected member expression");
+            throw new ArgumentException($"Expected MemberExpression, got '{expression.Body.GetType()}'");
         }
         return Table.MemberNameToColumnName(memberExpression.Member.Name);
     }
