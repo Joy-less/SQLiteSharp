@@ -209,12 +209,12 @@ public class Orm {
             deserialize: (SqliteValue sqlite, Type clrType) => (char)sqlite.AsInteger
         );
         RegisterType<float>(
-            SqliteType.Integer,
+            SqliteType.Float,
             serialize: (float clr) => clr,
             deserialize: (SqliteValue sqlite, Type clrType) => (float)sqlite.AsFloat
         );
         RegisterType<double>(
-            SqliteType.Integer,
+            SqliteType.Float,
             serialize: (double clr) => clr,
             deserialize: (SqliteValue sqlite, Type clrType) => sqlite.AsFloat
         );
