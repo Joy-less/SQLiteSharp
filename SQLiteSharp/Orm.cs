@@ -88,7 +88,7 @@ public class Orm {
             if (TypeSerializers.TryGetValue(fallbackType, out typeSerializer)) {
                 return typeSerializer;
             }
-            fallbackType = type.BaseType;
+            fallbackType = fallbackType.BaseType;
         }
 
         // Serializer not found
