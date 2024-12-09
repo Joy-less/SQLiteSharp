@@ -1,32 +1,72 @@
 using System.Collections.Concurrent;
 using System.Text;
 using System.Reflection;
+using SQLitePCL;
 
 namespace SQLiteSharp;
 
+/// <summary>
+/// An Object-Relational Mapper used to map CLR members to SQLite columns.
+/// </summary>
 public class Orm {
+    /// <summary>
+    /// The types recognised by the ORM.
+    /// </summary>
+    /// <remarks>
+    /// The types should be non-nullable, since type serializers are not used for <see langword="null"/>.
+    /// </remarks>
     public ConcurrentDictionary<Type, TypeSerializer> TypeSerializers { get; } = [];
+    /// <summary>
+    /// A predicate deciding whether the member should be made the primary key even if it lacks a <see cref="PrimaryKeyAttribute"/>.<br/>
+    /// By default, returns <see langword="true"/> if the member's name is "Id".
+    /// </summary>
+    /// <remarks>
+    /// This predicate is ignored if the member has a <see cref="PrimaryKeyAttribute"/>.
+    /// </remarks>
     public Func<MemberInfo, bool> IsImplicitPrimaryKey { get; set; } = Member => Member.Name == "Id";
+    /// <summary>
+    /// A predicate deciding whether an index should be made for the member even if it lacks a <see cref="IndexAttribute"/>.<br/>
+    /// By default, returns <see langword="true"/> if the member's name ends with "Id".
+    /// </summary>
+    /// <remarks>
+    /// This predicate is ignored if the member has an <see cref="IndexAttribute"/>.
+    /// </remarks>
     public Func<MemberInfo, bool> IsImplicitIndex { get; set; } = Member => Member.Name.EndsWith("Id");
-    public Func<MemberInfo, bool> IsImplicitAutoIncrementedPrimaryKey { get; set; } = Member => false;
+    /// <summary>
+    /// A predicate deciding whether the member should be auto-incremented even if it lacks a <see cref="AutoIncrementAttribute"/>.<br/>
+    /// By default, always returns <see langword="false"/>.
+    /// </summary>
+    /// <remarks>
+    /// This predicate is ignored if the member has an <see cref="AutoIncrementAttribute"/>.
+    /// </remarks>
+    public Func<MemberInfo, bool> IsImplicitAutoIncremented { get; set; } = Member => false;
 
+    /// <summary>
+    /// A global instance of <see cref="Orm"/> used when <see cref="SqliteConnectionOptions.Orm"/> is null.
+    /// </summary>
     public static Orm Default { get; } = new();
 
+    /// <summary>
+    /// Constructs a new <see cref="Orm"/> with the default type serializers.
+    /// </summary>
     public Orm() {
         AddDefaultTypeSerializers();
     }
+    /// <summary>
+    /// Creates a type serializer for the given type.
+    /// </summary>
     public void RegisterType(Type type, SqliteType sqliteType, Func<object, SqliteValue> serialize, Func<SqliteValue, Type, object?> deserialize) {
         TypeSerializers[type] = new TypeSerializer(type, sqliteType, serialize, deserialize);
     }
+    /// <inheritdoc cref="RegisterType(Type, SqliteType, Func{object, SqliteValue}, Func{SqliteValue, Type, object?})"/>
     public void RegisterType<T>(SqliteType sqliteType, Func<T, SqliteValue> serialize, Func<SqliteValue, Type, object?> deserialize) {
         RegisterType(typeof(T), sqliteType, (object clr) => serialize((T)clr), (SqliteValue sqlite, Type clrType) => deserialize(sqlite, clrType));
     }
-    public bool UnregisterType(Type type) {
-        return TypeSerializers.TryRemove(type, out _);
-    }
-    public bool UnregisterType<T>() {
-        return TypeSerializers.TryRemove(typeof(T), out _);
-    }
+    /// <summary>
+    /// Gets a type serializer for the given (non-nullable) type.<br/>
+    /// If not found for the exact type, the type's implemented or inherited interfaces are searched.<br/>
+    /// If not found for an interface, the type's base types are searched.
+    /// </summary>
     public TypeSerializer GetTypeSerializer(Type type) {
         // Get non-nullable type (int? to int)
         type = type.AsNotNullable();
@@ -55,10 +95,31 @@ public class Orm {
         // Serializer not found
         throw new InvalidOperationException($"No {nameof(TypeSerializer)} found for '{type}'");
     }
+    /// <summary>
+    /// Gets a type serializer for the given object's type and serializes the object as a <see cref="SqliteValue"/>.
+    /// </summary>
+    public SqliteValue Serialize(object? clr) {
+        if (clr is null) {
+            return SqliteValue.Null;
+        }
+        return GetTypeSerializer(clr.GetType()).Serialize(clr);
+    }
+    /// <summary>
+    /// Gets a type serializer for the given type and deserializes the object from a <see cref="SqliteValue"/>.
+    /// </summary>
+    public object? Deserialize(Type clrType, SqliteValue sqlite) {
+        if (sqlite.SqliteType is SqliteType.Null) {
+            return null;
+        }
+        return GetTypeSerializer(clrType).Deserialize(sqlite, clrType);
+    }
+    /// <summary>
+    /// Gets a SQL declaration string for the column (e.g. <c>name text unique not null</c>).
+    /// </summary>
     public string GetSqlDeclaration(SqliteColumn column) {
         TypeSerializer typeSerializer = GetTypeSerializer(column.ClrType);
 
-        string declaration = $"{column.Name.SqlQuote()} {GetTypeSql(typeSerializer.SqliteType).SqlQuote()}";
+        string declaration = $"{column.Name.SqlQuote()} {typeSerializer.SqliteType.ToString().SqlQuote()}";
 
         if (column.IsPrimaryKey) {
             declaration += " primary key";
@@ -84,7 +145,6 @@ public class Orm {
 
     private void AddDefaultTypeSerializers() {
         RegisterType<SqliteValue>(
-            // This type serializer for SqliteValue is only included to allow columns to receive typeless values from built-in pragmas like table_info.
             SqliteType.Any,
             serialize: (SqliteValue clr) => clr,
             deserialize: (SqliteValue sqlite, Type clrType) => sqlite
@@ -195,19 +255,26 @@ public class Orm {
             deserialize: (SqliteValue sqlite, Type clrType) => sqlite.AsText
         );
     }
-    private static string GetTypeSql(SqliteType sqliteType) => sqliteType switch {
-        SqliteType.Integer => "integer",
-        SqliteType.Float => "float",
-        SqliteType.Text => "text",
-        SqliteType.Blob => "blob",
-        SqliteType.Null => "null",
-        _ => throw new NotImplementedException()
-    };
 }
 
+/// <summary>
+/// Contains functions to convert between <see cref="object"/> and <see cref="SqliteValue"/> for a specific type.
+/// </summary>
 public readonly struct TypeSerializer(Type clrType, SqliteType sqliteType, Func<object, SqliteValue> serialize, Func<SqliteValue, Type, object?> deserialize) {
+    /// <summary>
+    /// The CLR (.NET) type used in the program.
+    /// </summary>
     public Type ClrType { get; } = clrType;
+    /// <summary>
+    /// The SQLite type used in the database.
+    /// </summary>
     public SqliteType SqliteType { get; } = sqliteType;
+    /// <summary>
+    /// Serializes the object from <see cref="ClrType"/> to <see cref="SqliteType"/>.
+    /// </summary>
     public Func<object, SqliteValue> Serialize { get; } = serialize;
+    /// <summary>
+    /// Serializes the object from <see cref="SqliteType"/> to the desired type (which should be compatible with <see cref="ClrType"/>).
+    /// </summary>
     public Func<SqliteValue, Type, object?> Deserialize { get; } = deserialize;
 }

@@ -1,5 +1,8 @@
 namespace SQLiteSharp;
 
+/// <summary>
+/// Contains names for string comparison collations built into <see cref="SQLiteSharp"/>.
+/// </summary>
 public static class Collation {
     /// <summary>
     /// Compares the strings for an exact match (case-sensitive).

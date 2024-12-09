@@ -8,6 +8,9 @@ using System.Reflection;
 
 namespace SQLiteSharp;
 
+/// <summary>
+/// Extension methods used in <see cref="SQLiteSharp"/>.
+/// </summary>
 public static class Globals {
     /// <summary>
     /// Converts an input string to a quoted SQL string that can be safely used in queries.<br/>
@@ -21,20 +24,6 @@ public static class Globals {
             return "null";
         }
         return $"{QuoteChar}{unsafeString.Replace(QuoteChar, $"{QuoteChar}{QuoteChar}")}{QuoteChar}";
-    }
-    public static Expression? AndAlso(this Expression? left, Expression? right) {
-        if (left is not null && right is not null) {
-            return Expression.AndAlso(left, right);
-        }
-        else if (left is not null) {
-            return left;
-        }
-        else if (right is not null) {
-            return right;
-        }
-        else {
-            return null;
-        }
     }
     public static Type AsNotNullable(this Type Type) {
         return Nullable.GetUnderlyingType(Type) ?? Type;

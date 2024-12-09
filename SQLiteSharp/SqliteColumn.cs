@@ -15,7 +15,7 @@ public class SqliteColumn {
     public bool IsUnique { get; }
     public IndexAttribute[] Indexes { get; }
 
-    public SqliteColumn(SqliteConnection connection, MemberInfo member) {
+    internal SqliteColumn(SqliteConnection connection, MemberInfo member) {
         Connection = connection;
 
         ClrMember = member;
@@ -31,7 +31,7 @@ public class SqliteColumn {
             || Connection.Orm.IsImplicitPrimaryKey(member);
 
         IsAutoIncremented = member.GetCustomAttribute<AutoIncrementAttribute>() is not null
-            || (IsPrimaryKey && Connection.Orm.IsImplicitAutoIncrementedPrimaryKey(member));
+            || Connection.Orm.IsImplicitAutoIncremented(member);
 
         Indexes = [.. member.GetCustomAttributes<IndexAttribute>()];
         if (Indexes.Length == 0 && Connection.Orm.IsImplicitIndex(member)) {
@@ -48,17 +48,13 @@ public class SqliteColumn {
         ClrMember.SetValue(row, value);
     }
     public void SetSqliteValue(object row, SqliteValue sqliteValue) {
-        TypeSerializer typeSerializer = Connection.Orm.GetTypeSerializer(ClrType);
-        object? value = typeSerializer.Deserialize(sqliteValue, ClrType);
-        SetValue(row, value);
+        SetValue(row, Connection.Orm.Deserialize(ClrType, sqliteValue));
     }
     public object? GetValue(object row) {
         return ClrMember.GetValue(row);
     }
     public SqliteValue GetSqliteValue(object row) {
-        object? value = GetValue(row);
-        TypeSerializer typeSerializer = Connection.Orm.GetTypeSerializer(ClrType);
-        return typeSerializer.Serialize(row);
+        return Connection.Orm.Serialize(GetValue(row));
     }
 
     private static Type GetMemberType(MemberInfo memberInfo) {

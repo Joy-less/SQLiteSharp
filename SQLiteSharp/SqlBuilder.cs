@@ -5,10 +5,28 @@ using System.Text;
 
 namespace SQLiteSharp;
 
+/// <summary>
+/// A SQLite command builder for a table using the fluent style.<br/>
+/// </summary>
+/// <remarks>
+/// Cannot be re-used.
+/// </remarks>
 public class SqlBuilder<T> where T : notnull, new() {
+    /// <summary>
+    /// The table the builder is building a command for.
+    /// </summary>
     public SqliteTable<T> Table { get; }
+    /// <summary>
+    /// The current parameters to be used with the command.
+    /// </summary>
     public Dictionary<string, object?> Parameters { get; } = [];
+    /// <summary>
+    /// Functions to convert CLR methods to SQL expressions.
+    /// </summary>
     public Dictionary<MethodInfo, Func<MethodCallExpression, string>> MethodToSqlConverters { get; } = [];
+    /// <summary>
+    /// Functions to convert CLR properties/fields to SQL expressions.
+    /// </summary>
     public Dictionary<MemberInfo, Func<MemberExpression, string>> MemberToSqlConverters { get; } = [];
 
     private readonly List<string> SelectList = [];
@@ -402,7 +420,7 @@ public class SqlBuilder<T> where T : notnull, new() {
         });
 
         // string.EndsWith(string)
-        MethodToSqlConverters.Add(typeof(string).GetMethod(nameof(string.StartsWith), [typeof(string)])!, methodCall => {
+        MethodToSqlConverters.Add(typeof(string).GetMethod(nameof(string.EndsWith), [typeof(string)])!, methodCall => {
             string str = (string)methodCall.Object.Execute()!;
             string? subStr = (string?)methodCall.Arguments[0].Execute();
             return $"{AddParameter(str)} like {AddParameter("%" + subStr)} escape '\\'";
@@ -450,8 +468,8 @@ public class SqlBuilder<T> where T : notnull, new() {
         });
 
         // string.IsNullOrEmpty(string)
-        MethodToSqlConverters.Add(typeof(string).GetMethod(nameof(string.IsNullOrEmpty), [])!, methodCall => {
-            string? str = (string?)methodCall.Object.Execute();
+        MethodToSqlConverters.Add(typeof(string).GetMethod(nameof(string.IsNullOrEmpty), [typeof(string)])!, methodCall => {
+            string? str = (string?)methodCall.Arguments[0].Execute();
             string parameter = AddParameter(str);
             return $"({parameter} is null or {parameter} = '')";
         });
@@ -476,85 +494,86 @@ public class SqlBuilder<T> where T : notnull, new() {
 
         // Math.Abs(double)
         MethodToSqlConverters.Add(typeof(Math).GetMethod(nameof(Math.Abs), [typeof(double)])!, methodCall => {
-            double value = (double)methodCall.Object.Execute()!;
+            double value = (double)methodCall.Arguments[0].Execute()!;
             return $"abs({AddParameter(value)})";
         });
 
         // Math.Round(double)
         MethodToSqlConverters.Add(typeof(Math).GetMethod(nameof(Math.Round), [typeof(double)])!, methodCall => {
-            double value = (double)methodCall.Object.Execute()!;
+            double value = (double)methodCall.Arguments[0].Execute()!;
             return $"round({AddParameter(value)})";
         });
 
         // Math.Ceiling(double)
         MethodToSqlConverters.Add(typeof(Math).GetMethod(nameof(Math.Ceiling), [typeof(double)])!, methodCall => {
-            double value = (double)methodCall.Object.Execute()!;
+            double value = (double)methodCall.Arguments[0].Execute()!;
             return $"ceil({AddParameter(value)})";
         });
 
         // Math.Floor(double)
         MethodToSqlConverters.Add(typeof(Math).GetMethod(nameof(Math.Floor), [typeof(double)])!, methodCall => {
-            double value = (double)methodCall.Object.Execute()!;
+            double value = (double)methodCall.Arguments[0].Execute()!;
             return $"floor({AddParameter(value)})";
         });
 
         // Math.Exp(double)
         MethodToSqlConverters.Add(typeof(Math).GetMethod(nameof(Math.Exp), [typeof(double)])!, methodCall => {
-            double value = (double)methodCall.Object.Execute()!;
+            double value = (double)methodCall.Arguments[0].Execute()!;
             return $"exp({AddParameter(value)})";
         });
 
         // Math.Log(double)
         MethodToSqlConverters.Add(typeof(Math).GetMethod(nameof(Math.Log), [typeof(double)])!, methodCall => {
-            double value = (double)methodCall.Object.Execute()!;
+            double value = (double)methodCall.Arguments[0].Execute()!;
             return $"log({AddParameter(value)})";
         });
 
-        // Math.Pow(double)
-        MethodToSqlConverters.Add(typeof(Math).GetMethod(nameof(Math.Pow), [typeof(double)])!, methodCall => {
-            double value = (double)methodCall.Object.Execute()!;
-            return $"power({AddParameter(value)})";
+        // Math.Pow(double, double)
+        MethodToSqlConverters.Add(typeof(Math).GetMethod(nameof(Math.Pow), [typeof(double), typeof(double)])!, methodCall => {
+            double value = (double)methodCall.Arguments[0].Execute()!;
+            double exponent = (double)methodCall.Arguments[1].Execute()!;
+            return $"power({AddParameter(value)}, {AddParameter(exponent)})";
         });
 
         // Math.Sqrt(double)
         MethodToSqlConverters.Add(typeof(Math).GetMethod(nameof(Math.Sqrt), [typeof(double)])!, methodCall => {
-            double value = (double)methodCall.Object.Execute()!;
+            double value = (double)methodCall.Arguments[0].Execute()!;
             return $"sqrt({AddParameter(value)})";
         });
 
         // Math.Sin(double)
         MethodToSqlConverters.Add(typeof(Math).GetMethod(nameof(Math.Sin), [typeof(double)])!, methodCall => {
-            double value = (double)methodCall.Object.Execute()!;
+            double value = (double)methodCall.Arguments[0].Execute()!;
             return $"sin({AddParameter(value)})";
         });
 
         // Math.Cos(double)
         MethodToSqlConverters.Add(typeof(Math).GetMethod(nameof(Math.Cos), [typeof(double)])!, methodCall => {
-            double value = (double)methodCall.Object.Execute()!;
+            double value = (double)methodCall.Arguments[0].Execute()!;
             return $"cos({AddParameter(value)})";
         });
 
         // Math.Tan(double)
         MethodToSqlConverters.Add(typeof(Math).GetMethod(nameof(Math.Tan), [typeof(double)])!, methodCall => {
-            double value = (double)methodCall.Object.Execute()!;
+            double value = (double)methodCall.Arguments[0].Execute()!;
             return $"tan({AddParameter(value)})";
         });
 
         // Math.Asin(double)
         MethodToSqlConverters.Add(typeof(Math).GetMethod(nameof(Math.Asin), [typeof(double)])!, methodCall => {
-            double value = (double)methodCall.Object.Execute()!;
+            double value = (double)methodCall.Arguments[0].Execute()!;
             return $"asin({AddParameter(value)})";
         });
 
         // Math.Acos(double)
         MethodToSqlConverters.Add(typeof(Math).GetMethod(nameof(Math.Acos), [typeof(double)])!, methodCall => {
-            double value = (double)methodCall.Object.Execute()!;
+            double value = (double)methodCall.Arguments[0].Execute()!;
             return $"acos({AddParameter(value)})";
         });
 
         // Math.Atan(double)
         MethodToSqlConverters.Add(typeof(Math).GetMethod(nameof(Math.Atan), [typeof(double)])!, methodCall => {
-            double value = (double)methodCall.Object.Execute()!;
+            double value = (double)methodCall.Arguments[0].Execute()!;
             return $"atan({AddParameter(value)})";
         });
     }
