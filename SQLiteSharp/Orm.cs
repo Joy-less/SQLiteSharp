@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using System.Text;
+using System.Text.Json;
 using System.Reflection;
 
 namespace SQLiteSharp;
@@ -148,6 +149,18 @@ public class Orm {
     }
 
     private void AddDefaultTypeSerializers() {
+        JsonSerializerOptions jsonOptions = new() {
+            IncludeFields = true,
+            NewLine = "\n",
+            AllowTrailingCommas = true,
+            ReadCommentHandling = JsonCommentHandling.Skip,
+        };
+        RegisterType<object>(
+            sqliteType: SqliteType.Text,
+            serialize: (object clr) => JsonSerializer.Serialize(clr, jsonOptions),
+            deserialize: (SqliteValue sqlite, Type clrType) => JsonSerializer.Deserialize(sqlite.AsText, clrType, jsonOptions)
+        );
+
         RegisterType<SqliteValue>(
             SqliteType.Any,
             serialize: (SqliteValue clr) => clr,
