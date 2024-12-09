@@ -11,9 +11,9 @@ SQLiteSharp is a powerful library to help you access a SQLite database in C#.
 
 ## Background
 
-This project is based on [SQLite-net](https://github.com/praeclarum/sqlite-net) by Krueger Systems Inc.
+This project was originally based on [SQLite-net](https://github.com/praeclarum/sqlite-net) by Krueger Systems Inc.
 
-The purpose of SQLiteSharp is to provide improvements to the original library, which is outdated in many ways.
+SQLiteSharp is a complete rewrite of the original, providing a modern experience akin to [MongoDB](https://www.mongodb.com) or [LiteDB](https://github.com/litedb-org/LiteDB) with the power of SQLite.
 
 ## Example
 
@@ -90,6 +90,11 @@ Connection.Orm.RegisterType<Sweet>(
     deserialize: (SqliteValue Value, Type ClrType) => JsonSerializer.Deserialize(Value.AsText, ClrType)
 );
 ```
+
+## Notes
+
+- Tables are automatically migrated to add new tables and columns, however changed columns are not updated.
+- SqliteConnections are not thread-safe and should not be used concurrently. However, you can open multiple SqliteConnections concurrently, as they use SQLite's built-in FullMutex.
 
 ## Versioning Guide
 
