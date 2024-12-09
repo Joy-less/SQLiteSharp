@@ -94,7 +94,7 @@ public class SqliteColumn {
     }
     /// <inheritdoc cref="SetValue(object, object?)"/>
     public void SetSqliteValue(object row, SqliteValue sqliteValue) {
-        SetValue(row, Connection.Orm.Deserialize(ClrType, sqliteValue));
+        SetValue(row, Connection.Orm.Deserialize(sqliteValue, ClrType));
     }
     /// <summary>
     /// Gets the row's member mapped to this column.

@@ -106,7 +106,7 @@ public class Orm {
     /// <summary>
     /// Gets a type serializer for the given type and deserializes the object from a <see cref="SqliteValue"/>.
     /// </summary>
-    public object? Deserialize(Type clrType, SqliteValue sqlite) {
+    public object? Deserialize(SqliteValue sqlite, Type clrType) {
         if (sqlite.SqliteType is SqliteType.Null) {
             return null;
         }

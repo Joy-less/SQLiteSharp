@@ -159,9 +159,7 @@ public class SqliteCommand(SqliteConnection connection) {
         }
     }
     private object? ReadColumn(Sqlite3Statement statement, int index, Type type) {
-        TypeSerializer typeSerializer = Connection.Orm.GetTypeSerializer(type);
-        SqliteValue value = SqliteRaw.GetColumnValue(statement, index);
-        return typeSerializer.Deserialize(value, type);
+        return Connection.Orm.Deserialize(SqliteRaw.GetColumnValue(statement, index), type);
     }
 }
 
