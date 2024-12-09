@@ -62,11 +62,12 @@ public class IndexAttribute(string? name = null) : Attribute {
     /// The name of the index to create.
     /// </summary>
     /// <remarks>
-    /// An index can be created for multiple columns by setting this to the same value.
+    /// An index can be created over multiple columns by setting this to the same value.
     /// </remarks>
     public string? Name { get; set; } = name;
     /// <summary>
-    /// If <see langword="true"/>, every row must have a unique value for this index.
+    /// If <see langword="true"/>, every row must have a unique value for this index.<br/>
+    /// Default: <see langword="true"/>
     /// </summary>
     public bool Unique { get; set; }
 }
