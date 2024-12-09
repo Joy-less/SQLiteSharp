@@ -235,16 +235,16 @@ public partial class SqliteConnection : IDisposable {
     /// <returns>
     /// The first column of each row returned by the query.
     /// </returns>
-    public IEnumerable<T> ExecuteScalar<T>(string query, params IEnumerable<object?> parameters) {
+    public IEnumerable<T> ExecuteScalars<T>(string query, params IEnumerable<object?> parameters) {
         SqliteCommand command = CreateCommand(query, parameters);
         return command.ExecuteScalars<T>();
     }
-    /// <inheritdoc cref="ExecuteScalar{T}(string, IEnumerable{object?})"/>
-    public Task<IEnumerable<T>> ExecuteScalarAsync<T>(string query, params IEnumerable<object?> parameters) {
-        return Task.Run(() => ExecuteScalar<T>(query, parameters));
+    /// <inheritdoc cref="ExecuteScalars{T}(string, IEnumerable{object?})"/>
+    public Task<IEnumerable<T>> ExecuteScalarsAsync<T>(string query, params IEnumerable<object?> parameters) {
+        return Task.Run(() => ExecuteScalars<T>(query, parameters));
     }
 
-    /// <inheritdoc cref="ExecuteScalar{T}(string, IEnumerable{object?})"/>
+    /// <inheritdoc cref="ExecuteScalars{T}(string, IEnumerable{object?})"/>
     public IEnumerable<T> ExecuteScalars<T>(string query, IDictionary<string, object?> parameters) {
         SqliteCommand command = CreateCommand(query, parameters);
         return command.ExecuteScalars<T>();

@@ -237,7 +237,7 @@ public class SqlBuilder<T> where T : notnull, new() {
     public Task<int> ExecuteAsync() {
         return Table.Connection.ExecuteAsync(GetCommand(), Parameters);
     }
-    /// <inheritdoc cref="SqliteConnection.ExecuteScalar{T}(string, IEnumerable{object?})"/>
+    /// <inheritdoc cref="SqliteConnection.ExecuteScalars{T}(string, IEnumerable{object?})"/>
     public IEnumerable<TScalar> ExecuteScalars<TScalar>() {
         return Table.Connection.ExecuteScalars<TScalar>(GetCommand(), Parameters);
     }
