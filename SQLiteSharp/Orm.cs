@@ -1,7 +1,6 @@
 using System.Collections.Concurrent;
 using System.Text;
 using System.Reflection;
-using SQLitePCL;
 
 namespace SQLiteSharp;
 
@@ -69,7 +68,7 @@ public class Orm {
     /// </summary>
     public TypeSerializer GetTypeSerializer(Type type) {
         // Get non-nullable type (int? to int)
-        type = type.AsNotNullable();
+        type = Nullable.GetUnderlyingType(type) ?? type;
 
         // Try get serializer for exact type
         if (TypeSerializers.TryGetValue(type, out TypeSerializer typeSerializer)) {

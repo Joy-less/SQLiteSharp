@@ -25,9 +25,9 @@ public static class Globals {
         }
         return $"{QuoteChar}{unsafeString.Replace(QuoteChar, $"{QuoteChar}{QuoteChar}")}{QuoteChar}";
     }
-    public static Type AsNotNullable(this Type Type) {
-        return Nullable.GetUnderlyingType(Type) ?? Type;
-    }
+    /// <summary>
+    /// Gets the value of the member if it's a property or field.
+    /// </summary>
     public static object? GetValue(this MemberInfo memberInfo, object? obj) {
         return memberInfo switch {
             PropertyInfo propertyInfo => propertyInfo.GetValue(obj),
@@ -35,6 +35,9 @@ public static class Globals {
             _ => throw new ArgumentException(null, nameof(memberInfo)),
         };
     }
+    /// <summary>
+    /// Sets the value of the member if it's a property or field.
+    /// </summary>
     public static void SetValue(this MemberInfo memberInfo, object? obj, object? value) {
         switch (memberInfo) {
             case PropertyInfo propertyInfo:
@@ -47,6 +50,9 @@ public static class Globals {
                 throw new ArgumentException(null, nameof(memberInfo));
         }
     }
+    /// <summary>
+    /// Gets the constant value of the expression or compiles it to a delegate and invokes it.
+    /// </summary>
     public static object? Execute(this Expression? expression) {
         if (expression is null) {
             return null;

@@ -2,17 +2,53 @@ using System.Reflection;
 
 namespace SQLiteSharp;
 
+/// <summary>
+/// A single column in a <see cref="SqliteTable{T}"/> mapped to a CLR member.
+/// </summary>
 public class SqliteColumn {
+    /// <summary>
+    /// The database connection connected to the column.
+    /// </summary>
     public SqliteConnection Connection { get; }
+    /// <summary>
+    /// The name of the column.
+    /// </summary>
     public string Name { get; }
+    /// <summary>
+    /// The mapped CLR member (property/field).
+    /// </summary>
     public MemberInfo ClrMember { get; }
+    /// <summary>
+    /// The CLR type of the mapped CLR member (property/field).
+    /// </summary>
     public Type ClrType { get; }
+    /// <summary>
+    /// The collation name to use with the column.
+    /// </summary>
     public string? Collation { get; }
+    /// <summary>
+    /// The check expression constraint for the column.
+    /// </summary>
     public string? Check { get; }
+    /// <summary>
+    /// Whether the column is automatically incremented on insert.
+    /// </summary>
     public bool IsAutoIncremented { get; }
+    /// <summary>
+    /// Whether the column is the primary key of the table.
+    /// </summary>
     public bool IsPrimaryKey { get; }
+    /// <summary>
+    /// Whether the column value is required to be non-null.
+    /// </summary>
     public bool IsNotNull { get; }
+    /// <summary>
+    /// Whether the column is required to have a unique value for each row.
+    /// </summary>
     public bool IsUnique { get; }
+    /// <summary>
+    /// The indexes to create in the table.
+    /// </summary>
     public IndexAttribute[] Indexes { get; }
 
     internal SqliteColumn(SqliteConnection connection, MemberInfo member) {
@@ -44,15 +80,23 @@ public class SqliteColumn {
             || IsPrimaryKey;
     }
 
+    /// <summary>
+    /// Sets the row's member mapped to this column.
+    /// </summary>
     public void SetValue(object row, object? value) {
         ClrMember.SetValue(row, value);
     }
+    /// <inheritdoc cref="SetValue(object, object?)"/>
     public void SetSqliteValue(object row, SqliteValue sqliteValue) {
         SetValue(row, Connection.Orm.Deserialize(ClrType, sqliteValue));
     }
+    /// <summary>
+    /// Gets the row's member mapped to this column.
+    /// </summary>
     public object? GetValue(object row) {
         return ClrMember.GetValue(row);
     }
+    /// <inheritdoc cref="GetValue(object)"/>
     public SqliteValue GetSqliteValue(object row) {
         return Connection.Orm.Serialize(GetValue(row));
     }
@@ -61,7 +105,7 @@ public class SqliteColumn {
         return memberInfo switch {
             PropertyInfo propertyInfo => propertyInfo.PropertyType,
             FieldInfo fieldInfo => fieldInfo.FieldType,
-            _ => throw new InvalidProgramException("Member must be a property or a field."),
+            _ => throw new NotSupportedException("Member must be a property or a field."),
         };
     }
 }

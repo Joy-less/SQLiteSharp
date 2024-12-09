@@ -4,7 +4,13 @@ namespace SQLiteSharp;
 /// An open connection to a SQLite database.
 /// </summary>
 public partial class SqliteConnection : IDisposable {
+    /// <summary>
+    /// The Object-Relational Mapper to use with the connection.
+    /// </summary>
     public Orm Orm { get; }
+    /// <summary>
+    /// The native SQLite database handle from <see cref="SQLitePCL"/>.
+    /// </summary>
     public Sqlite3DatabaseHandle Handle { get; }
 
     /// <summary>
@@ -250,7 +256,7 @@ public partial class SqliteConnection : IDisposable {
     /// Creates a transaction or savepoint for commands to be rolled back or committed.<br/>
     /// Call <see cref="Rollback(string?)"/> to cancel the transaction or <see cref="Commit(string?)"/> to perform the transaction.
     /// </summary>
-    public void CreateTransaction(string? savePointName = null) {
+    public void CreateSavePoint(string? savePointName = null) {
         try {
             // Create savepoint
             if (savePointName is not null) {
@@ -267,13 +273,13 @@ public partial class SqliteConnection : IDisposable {
             throw;
         }
     }
-    /// <inheritdoc cref="CreateTransaction(string?)"/>
-    public Task CreateTransactionAsync(string? savePointName = null) {
-        return Task.Run(() => CreateTransaction(savePointName));
+    /// <inheritdoc cref="CreateSavePoint(string?)"/>
+    public Task SavePointAsync(string? savePointName = null) {
+        return Task.Run(() => CreateSavePoint(savePointName));
     }
 
     /// <summary>
-    /// Rolls back the transaction to a point begun by <see cref="BeginTransaction()"/> or <see cref="CreateTransaction(string)"/>.
+    /// Reverses the transaction to a point created by <see cref="CreateSavePoint(string?)"/>.
     /// </summary>
     public void Rollback(string? savePointName = null) {
         try {
@@ -298,7 +304,7 @@ public partial class SqliteConnection : IDisposable {
     }
 
     /// <summary>
-    /// Commits the transaction that was begun by <see cref="BeginTransaction()"/> or <see cref="CreateTransaction(string)"/>.
+    /// Commits the transaction or savepoint created by <see cref="CreateSavePoint(string?)"/>.
     /// </summary>
     public void Commit(string? savePointName = null) {
         try {
@@ -329,7 +335,7 @@ public partial class SqliteConnection : IDisposable {
     public void RunInTransaction(Action action) {
         string savePointName = Guid.NewGuid().ToString();
         try {
-            CreateTransaction(savePointName);
+            CreateSavePoint(savePointName);
             action();
             Commit(savePointName);
         }

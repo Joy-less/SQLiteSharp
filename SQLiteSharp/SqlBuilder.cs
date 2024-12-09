@@ -40,7 +40,7 @@ public class SqlBuilder<T> where T : notnull, new() {
     private long LimitCount = -1;
     private long OffsetCount = -1;
 
-    private int CurrentParameterIndex;
+    private int ParameterCounter;
 
     internal SqlBuilder(SqliteTable<T> table) {
         Table = table;
@@ -48,63 +48,111 @@ public class SqlBuilder<T> where T : notnull, new() {
         AddDefaultSqlConverters();
     }
 
+    /// <summary>
+    /// Adds a <c>select</c> statement for every column.
+    /// </summary>
     public SqlBuilder<T> Select() {
         SelectList.Add($"{Table.Name.SqlQuote()}.*");
         return this;
     }
-    public SqlBuilder<T> Select(string columnName) {
-        SelectList.Add($"{Table.Name.SqlQuote()}.{columnName.SqlQuote()}");
-        return this;
-    }
-    public SqlBuilder<T> Select(string columnName, SelectType selectType) {
-        SelectList.Add($"{selectType}({Table.Name.SqlQuote()}.{columnName.SqlQuote()})");
-        return this;
-    }
+    /// <summary>
+    /// Adds a <c>select(...)</c> statement for every column.
+    /// </summary>
     public SqlBuilder<T> Select(SelectType selectType) {
         SelectList.Add($"{selectType}(*)");
         return this;
     }
-    public SqlBuilder<T> OrderBy(string columnName) {
-        OrderByList.Add($"{Table.Name.SqlQuote()}.{columnName.SqlQuote()}");
+    /// <summary>
+    /// Adds a <c>select</c> statement for a specific column.
+    /// </summary>
+    public SqlBuilder<T> Select(string columnName) {
+        SelectList.Add($"{Table.Name.SqlQuote()}.{columnName.SqlQuote()}");
         return this;
     }
+    /// <summary>
+    /// Adds a <c>select(...)</c> statement for a specific column.
+    /// </summary>
+    public SqlBuilder<T> Select(string columnName, SelectType selectType) {
+        SelectList.Add($"{selectType}({Table.Name.SqlQuote()}.{columnName.SqlQuote()})");
+        return this;
+    }
+    /// <summary>
+    /// Adds an <c>order by asc</c> statement for a specific column.
+    /// </summary>
+    public SqlBuilder<T> OrderBy(string columnName) {
+        OrderByList.Add($"{Table.Name.SqlQuote()}.{columnName.SqlQuote()} asc");
+        return this;
+    }
+    /// <summary>
+    /// Adds an <c>order by desc</c> statement for a specific column.
+    /// </summary>
     public SqlBuilder<T> OrderByDescending(string columnName) {
         OrderByList.Add($"{Table.Name.SqlQuote()}.{columnName.SqlQuote()} desc");
         return this;
     }
+    /// <summary>
+    /// Adds a <c>group by</c> statement for a specific column.
+    /// </summary>
     public SqlBuilder<T> GroupBy(string columnName) {
         GroupByList.Add($"{Table.Name.SqlQuote()}.{columnName.SqlQuote()}");
         return this;
     }
+    /// <summary>
+    /// Adds a <c>where</c> statement.
+    /// </summary>
     public SqlBuilder<T> Where(string condition) {
         WhereList.Add(condition);
         return this;
     }
+    /// <summary>
+    /// Adds a <c>having</c> statement.
+    /// </summary>
+    /// <remarks>
+    /// This is similar to <see cref="Where(string)"/> but applies after <see cref="GroupBy(string)"/>.
+    /// </remarks>
     public SqlBuilder<T> Having(string condition) {
         HavingList.Add(condition);
         return this;
     }
+    /// <summary>
+    /// Adds a <c>limit</c> statement.
+    /// </summary>
     public SqlBuilder<T> Take(long count) {
         LimitCount += count;
         return this;
     }
+    /// <summary>
+    /// Adds an <c>offset</c> statement.
+    /// </summary>
     public SqlBuilder<T> Skip(long count) {
         OffsetCount += count;
         return this;
     }
+    /// <summary>
+    /// Adds an <c>update</c> statement for a specific column.
+    /// </summary>
     public SqlBuilder<T> Update(string columnName, string newValueExpression) {
         UpdateList.Add($"{Table.Name.SqlQuote()}.{columnName.SqlQuote()}", newValueExpression);
         return this;
     }
+    /// <summary>
+    /// Adds an <c>insert</c> statement for a specific column.
+    /// </summary>
     public SqlBuilder<T> Insert(string columnName, string valueExpression) {
-        InsertList.Add($"{Table.Name.SqlQuote()}.{columnName.SqlQuote()}", valueExpression);
+        InsertList.Add($"{columnName.SqlQuote()}", valueExpression);
         return this;
     }
+    /// <summary>
+    /// Adds a <c>delete</c> statement.
+    /// </summary>
     public SqlBuilder<T> Delete() {
         DeleteFlag = true;
         return this;
     }
 
+    /// <summary>
+    /// Builds a SQL command from the state of the builder, to be used with <see cref="Parameters"/>.
+    /// </summary>
     public string GetCommand() {
         StringBuilder builder = new();
 
@@ -146,14 +194,13 @@ public class SqlBuilder<T> where T : notnull, new() {
             builder.AppendLine(";");
         }
         if (InsertList.Count > 0) {
-            List<KeyValuePair<string, string>> insertList = [.. InsertList];
             builder.AppendLine($"insert into {Table.Name.SqlQuote()}");
-            if (insertList.Count == 0) {
+            if (InsertList.Count == 0) {
                 builder.AppendLine("default values");
             }
             else {
-                builder.AppendLine($"({insertList.Select(insert => insert.Key)})");
-                builder.AppendLine($"values ({insertList.Select(insert => insert.Value)})");
+                builder.AppendLine($"({string.Join(",", InsertList.Select(insert => insert.Key))})");
+                builder.AppendLine($"values ({string.Join(",", InsertList.Select(insert => insert.Value))})");
             }
             if (WhereList.Count > 0) {
                 builder.AppendLine($"where {string.Join(" and ", WhereList)}");
@@ -207,43 +254,55 @@ public class SqlBuilder<T> where T : notnull, new() {
         return Table.ExecuteQueryAsync(GetCommand(), Parameters);
     }
 
+    /// <inheritdoc cref="Select(string)"/>
     public SqlBuilder<T> Select(Expression<Func<T, object?>> column) {
         Select(MemberExpressionToColumnName(column));
         return this;
     }
+    /// <inheritdoc cref="Select(string, SelectType)"/>
     public SqlBuilder<T> Select(Expression<Func<T, object?>> column, SelectType selectType) {
         Select(MemberExpressionToColumnName(column), selectType);
         return this;
     }
+    /// <inheritdoc cref="OrderBy(string)"/>
     public SqlBuilder<T> OrderBy(Expression<Func<T, object?>> column) {
         OrderBy(MemberExpressionToColumnName(column));
         return this;
     }
+    /// <inheritdoc cref="OrderByDescending(string)"/>
     public SqlBuilder<T> OrderByDescending(Expression<Func<T, object?>> column) {
         OrderByDescending(MemberExpressionToColumnName(column));
         return this;
     }
+    /// <inheritdoc cref="GroupBy(string)"/>
     public SqlBuilder<T> GroupBy(Expression<Func<T, object?>> column) {
         GroupBy(MemberExpressionToColumnName(column));
         return this;
     }
+    /// <inheritdoc cref="Where(string)"/>
     public SqlBuilder<T> Where(Expression<Func<T, bool>> predicate) {
         Where(ExpressionToSql(predicate.Body, predicate.Parameters[0]));
         return this;
     }
+    /// <inheritdoc cref="Having(string)"/>
     public SqlBuilder<T> Having(Expression<Func<T, bool>> predicate) {
         Having(ExpressionToSql(predicate.Body, predicate.Parameters[0]));
         return this;
     }
+    /// <inheritdoc cref="Update(string, string)"/>
     public SqlBuilder<T> Update(Expression<Func<T, object?>> column, Expression<Func<T, object?>> newValueExpression) {
         Update(MemberExpressionToColumnName(column), ExpressionToSql(newValueExpression.Body, newValueExpression.Parameters[0]));
         return this;
     }
+    /// <inheritdoc cref="Insert(string, string)"/>
     public SqlBuilder<T> Insert(Expression<Func<T, object?>> column, Expression<Func<T, object?>> valueExpression) {
         Insert(MemberExpressionToColumnName(column), ExpressionToSql(valueExpression.Body, valueExpression.Parameters[0]));
         return this;
     }
 
+    /// <summary>
+    /// Converts the CLR operator to a SQL operator.
+    /// </summary>
     public static string OperatorToSql(ExpressionType operatorType) => operatorType switch {
         ExpressionType.GreaterThan => ">",
         ExpressionType.GreaterThanOrEqual => ">=",
@@ -265,6 +324,9 @@ public class SqlBuilder<T> where T : notnull, new() {
         ExpressionType.RightShift => ">>",
         _ => throw new NotSupportedException($"Cannot get SQL operator for {operatorType}")
     };
+    /// <summary>
+    /// Converts the string comparison type to a SQLite collation name.
+    /// </summary>
     public static string StringComparisonToCollation(StringComparison stringComparison) => stringComparison switch {
         StringComparison.Ordinal => Collation.Binary,
         StringComparison.OrdinalIgnoreCase => Collation.NoCase,
@@ -275,22 +337,37 @@ public class SqlBuilder<T> where T : notnull, new() {
         _ => throw new NotImplementedException($"{stringComparison.GetType()}")
     };
 
+    /// <summary>
+    /// Increments the parameter counter and returns the formatted SQL parameter name (including the <c>@</c>).
+    /// </summary>
     public string GenerateParameterName() {
-        CurrentParameterIndex++;
-        return $"@p{CurrentParameterIndex}";
+        ParameterCounter++;
+        return $"@p{ParameterCounter}";
     }
+    /// <summary>
+    /// Adds a parameter with the given value, returning the generated formatted SQL parameter name (including the <c>@</c>).
+    /// </summary>
     public string AddParameter(object? value) {
         string name = GenerateParameterName();
         Parameters.Add(name, value);
         return name;
     }
 
+    /// <summary>
+    /// Converts a member (property/field) expression to the name of a column in the table.
+    /// </summary>
     private string MemberExpressionToColumnName(LambdaExpression expression) {
         if (expression.Body is not MemberExpression memberExpression) {
             throw new ArgumentException("Expected member expression");
         }
         return Table.MemberNameToColumnName(memberExpression.Member.Name);
     }
+    /// <summary>
+    /// Recursively converts the CLR expression to a SQL expression, adding parameters where necessary.
+    /// </summary>
+    /// <param name="rowExpression">
+    /// The row parameter (e.g. the <c>player</c> in <c>(player => player.name)</c>).
+    /// </param>
     private string ExpressionToSql(Expression expression, ParameterExpression rowExpression) {
         switch (expression) {
             // Constant (3)
