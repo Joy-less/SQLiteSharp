@@ -294,9 +294,14 @@ public class SqlBuilder<T> where T : notnull, new() {
         Update(MemberExpressionToColumnName(column), ExpressionToSql(newValueExpression.Body, newValueExpression.Parameters[0]));
         return this;
     }
+    /// <inheritdoc cref="Update(Expression{Func{T, object?}}, Expression{Func{T, object?}})"/>
+    public SqlBuilder<T> Update(Expression<Func<T, object?>> column, object? newValue) {
+        Update(column, (T row) => newValue);
+        return this;
+    }
     /// <inheritdoc cref="Insert(string, string)"/>
-    public SqlBuilder<T> Insert(Expression<Func<T, object?>> column, Expression<Func<T, object?>> valueExpression) {
-        Insert(MemberExpressionToColumnName(column), ExpressionToSql(valueExpression.Body, valueExpression.Parameters[0]));
+    public SqlBuilder<T> Insert(Expression<Func<T, object?>> column, object? value) {
+        Insert(MemberExpressionToColumnName(column), AddParameter(value));
         return this;
     }
 
