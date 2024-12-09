@@ -162,8 +162,8 @@ public partial class SqliteConnection : IDisposable {
         return CreateCommand(query).ExecuteQuery(GetTablePlaceholder<TableInfo>("table_list"));
     }
     /// <inheritdoc cref="GetTables(string?)"/>
-    public Task<IEnumerable<TableInfo>> GetTablesAsync() {
-        return Task.Run(() => GetTables());
+    public Task<IEnumerable<TableInfo>> GetTablesAsync(string? tableName = null) {
+        return Task.Run(() => GetTables(tableName));
     }
 
     /// <summary>
@@ -347,6 +347,9 @@ public partial class SqliteConnection : IDisposable {
         }
     }
     /// <inheritdoc cref="RunInTransaction(Action)"/>
+    /// <remarks>
+    /// Since the action is run asynchronously, calls within the action should be synchronous.
+    /// </remarks>
     public Task RunInTransactionAsync(Action action) {
         return Task.Run(() => RunInTransaction(action));
     }
