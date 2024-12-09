@@ -132,7 +132,7 @@ public class SqlBuilder<T> where T : notnull, new() {
     /// Adds an <c>update</c> statement for a specific column.
     /// </summary>
     public SqlBuilder<T> Update(string columnName, string newValueExpression) {
-        UpdateList.Add($"{Table.Name.SqlQuote()}.{columnName.SqlQuote()}", newValueExpression);
+        UpdateList.Add($"{columnName.SqlQuote()}", newValueExpression);
         return this;
     }
     /// <summary>
@@ -179,9 +179,8 @@ public class SqlBuilder<T> where T : notnull, new() {
             builder.AppendLine(";");
         }
         if (UpdateList.Count > 0) {
-            List<KeyValuePair<string, string>> updateList = [.. UpdateList];
             builder.AppendLine($"update {Table.Name.SqlQuote()}");
-            builder.AppendLine($"set {string.Join(",", updateList.Select(update => $"{update.Key} = {update.Value}"))}");
+            builder.AppendLine($"set {string.Join(",", UpdateList.Select(update => $"{update.Key} = {update.Value}"))}");
             if (WhereList.Count > 0) {
                 builder.AppendLine($"where {string.Join(" and ", WhereList)}");
             }
