@@ -305,7 +305,7 @@ public class SqliteTable<T> where T : notnull, new() {
     /// <returns>
     /// The number of rows updated.
     /// </returns>
-    public int UpdateOne(T row) {
+    public int Update(T row) {
         // Ensure table has primary key
         if (PrimaryKey is null) {
             throw new NotSupportedException($"Can't update in table '{Name}' since it has no annotated primary key");
@@ -327,9 +327,9 @@ public class SqliteTable<T> where T : notnull, new() {
         int rowCount = builder.Execute();
         return rowCount;
     }
-    /// <inheritdoc cref="UpdateOne(T)"/>
-    public Task<int> UpdateOneAsync(T row) {
-        return Task.Run(() => UpdateOne(row));
+    /// <inheritdoc cref="Update(T)"/>
+    public Task<int> UpdateAsync(T row) {
+        return Task.Run(() => Update(row));
     }
 
     /// <summary>
@@ -345,7 +345,7 @@ public class SqliteTable<T> where T : notnull, new() {
         int counter = 0;
         Connection.RunInTransaction(() => {
             foreach (T row in rows) {
-                counter += UpdateOne(row);
+                counter += Update(row);
             }
         });
         return counter;
