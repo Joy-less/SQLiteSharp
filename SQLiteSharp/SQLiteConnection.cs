@@ -141,29 +141,33 @@ public partial class SqliteConnection : IDisposable {
     }
 
     /// <summary>
-    /// Gets information about each column in a table.
+    /// Gets information about each table in the database, as returned from <c>pragma table_list</c>.
     /// </summary>
-    public IEnumerable<ColumnInfo> GetTableInfo(string tableName) {
-        string query = $"pragma table_info({tableName.SqlQuote()})";
-        return CreateCommand(query).ExecuteQuery(GetTablePlaceholder<ColumnInfo>("table_info"));
+    /// <param name="tableName">
+    /// If not <see langword="null"/>, only returns a result for the table with the given name.
+    /// </param>
+    public IEnumerable<TableInfo> GetTables(string? tableName = null) {
+        string query = $"pragma table_list";
+        if (tableName is not null) {
+            query += $"({tableName.SqlQuote()})";
+        }
+        return CreateCommand(query).ExecuteQuery(GetTablePlaceholder<TableInfo>("table_list"));
     }
-    /// <inheritdoc cref="GetTableInfo(string)"/>
-    public Task<IEnumerable<ColumnInfo>> GetTableInfoAsync(string tableName) {
-        return Task.Run(() => GetTableInfo(tableName));
+    /// <inheritdoc cref="GetTables(string?)"/>
+    public Task<IEnumerable<TableInfo>> GetTablesAsync() {
+        return Task.Run(() => GetTables());
     }
 
     /// <summary>
-    /// Returns true if the <c>table_info</c> pragma returns any rows.
+    /// Gets information about each column in a table, as returned from <c>pragma table_info</c>.
     /// </summary>
-    /// <remarks>
-    /// Tables must have at least one row in SQLite.
-    /// </remarks>
-    public bool TableExists(string tableName) {
-        return GetTableInfo(tableName).Any();
+    public IEnumerable<ColumnInfo> GetColumns(string tableName) {
+        string query = $"pragma table_info({tableName.SqlQuote()})";
+        return CreateCommand(query).ExecuteQuery(GetTablePlaceholder<ColumnInfo>("table_info"));
     }
-    /// <inheritdoc cref="TableExists(string)"/>
-    public Task<bool> TableExistsAsync(string tableName) {
-        return Task.Run(() => TableExists(tableName));
+    /// <inheritdoc cref="GetColumns(string)"/>
+    public Task<IEnumerable<ColumnInfo>> GetColumnsAsync(string tableName) {
+        return Task.Run(() => GetColumns(tableName));
     }
 
     /// <summary>

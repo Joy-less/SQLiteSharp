@@ -1,3 +1,5 @@
+#pragma warning disable CS1591
+
 using SQLitePCL;
 
 namespace SQLiteSharp;
@@ -238,6 +240,7 @@ public enum OpenFlags {
 }
 
 public enum SqliteType {
+    Any = 0,
     Integer = Sqlite3.SQLITE_INTEGER,
     Float = Sqlite3.SQLITE_FLOAT,
     Text = Sqlite3.SQLITE_TEXT,

@@ -4,16 +4,34 @@ using System.Reflection;
 
 namespace SQLiteSharp;
 
-public abstract class SqliteTable {
-}
-public class SqliteTable<T> : SqliteTable where T : notnull, new() {
+/// <summary>
+/// A single table in a <see cref="SqliteConnection"/> mapped to a CLR object.
+/// </summary>
+public class SqliteTable<T> where T : notnull, new() {
+    /// <summary>
+    /// The database connection connected to the table.
+    /// </summary>
     public SqliteConnection Connection { get; }
+    /// <summary>
+    /// The name of the table.
+    /// </summary>
     public string Name { get; }
+    /// <summary>
+    /// The virtual module name (e.g. "FTS5") to use when creating the table.
+    /// </summary>
     public string? VirtualModule { get; }
+    /// <summary>
+    /// Whether the table should be created without an implicit <c>rowid</c>.
+    /// </summary>
     public bool WithoutRowId { get; }
+    /// <summary>
+    /// The columns of the table.
+    /// </summary>
     public SqliteColumn[] Columns { get; }
+    /// <summary>
+    /// The column designated as the primary key of the table.
+    /// </summary>
     public SqliteColumn? PrimaryKey { get; }
-    public bool HasAutoIncrementedPrimaryKey { get; }
 
     internal SqliteTable(SqliteConnection connection, string? name = null, string? virtualModule = null, bool createTable = true) {
         Connection = connection;
@@ -42,17 +60,6 @@ public class SqliteTable<T> : SqliteTable where T : notnull, new() {
     /// <inheritdoc cref="DeleteTable()"/>
     public Task DeleteTableAsync() {
         return Task.Run(DeleteTable);
-    }
-
-    public long Count(Expression<Func<T, bool>>? predicate = null) {
-        SqlBuilder<T> query = Build().Select(SelectType.Count);
-        if (predicate is not null) {
-            query.Where(predicate);
-        }
-        return query.ExecuteScalars<long>().First();
-    }
-    public Task<long> CountAsync(Expression<Func<T, bool>>? predicate = null) {
-        return Task.Run(() => Count(predicate));
     }
 
     /// <summary>
@@ -153,6 +160,21 @@ public class SqliteTable<T> : SqliteTable where T : notnull, new() {
     }
 
     /// <summary>
+    /// Counts the number of rows matching the predicate.
+    /// </summary>
+    public long Count(Expression<Func<T, bool>>? predicate = null) {
+        SqlBuilder<T> query = Build().Select(SelectType.Count);
+        if (predicate is not null) {
+            query.Where(predicate);
+        }
+        return query.ExecuteScalars<long>().First();
+    }
+    /// <inheritdoc cref="Count(Expression{Func{T, bool}}?)"/>
+    public Task<long> CountAsync(Expression<Func<T, bool>>? predicate = null) {
+        return Task.Run(() => Count(predicate));
+    }
+
+    /// <summary>
     /// Inserts the row into the table, updating any auto-incremented primary keys.<br/>
     /// </summary>
     /// <param name="modifier">
@@ -160,32 +182,26 @@ public class SqliteTable<T> : SqliteTable where T : notnull, new() {
     /// </param>
     /// <returns>The number of rows added.</returns>
     public int Insert(T row, string? modifier = null) {
-        SqliteColumn[] columns = Columns;
-        // Strip auto-incremented columns (unless "OR REPLACE"/"OR IGNORE")
-        if (string.IsNullOrEmpty(modifier)) {
-            columns = [.. columns.Where(column => !column.IsAutoIncremented)];
+        // Build insert query
+        SqlBuilder<T> builder = Build();
+        foreach (SqliteColumn column in Columns) {
+            // Strip auto-incremented columns from insert (unless contains modifier like "OR REPLACE")
+            if (column.IsAutoIncremented && modifier is null) {
+                continue;
+            }
+            builder.Insert(column.Name, builder.AddParameter(column.GetValue(row)));
         }
 
-        // Get column values for object (row)
-        IEnumerable<object?> values = columns.Select(column => column.GetValue(row));
+        // Execute insert
+        int rowCount = builder.Execute();
 
-        string query;
-        if (columns.Length == 0) {
-            query = $"insert {modifier} into {Name.SqlQuote()} default values";
+        // Auto-increment columns
+        foreach (SqliteColumn column in Columns) {
+            if (column.IsAutoIncremented) {
+                long rowId = SqliteRaw.GetLastInsertRowId(Connection.Handle);
+                column.SetSqliteValue(row, rowId);
+            }
         }
-        else {
-            string columnsSql = string.Join(",", columns.Select(column => column.Name.SqlQuote()));
-            string valuesSql = string.Join(",", columns.Select(column => "?"));
-            query = $"insert {modifier} into {Name.SqlQuote()}({columnsSql}) values ({valuesSql})";
-        }
-
-        int rowCount = Connection.Execute(query, values);
-
-        if (HasAutoIncrementedPrimaryKey) {
-            long rowId = SqliteRaw.GetLastInsertRowId(Connection.Handle);
-            PrimaryKey?.SetSqliteValue(row, rowId);
-        }
-
         return rowCount;
     }
     /// <inheritdoc cref="Insert(T, string?)"/>
@@ -295,22 +311,20 @@ public class SqliteTable<T> : SqliteTable where T : notnull, new() {
             throw new NotSupportedException($"Can't update in table '{Name}' since it has no annotated primary key");
         }
 
-        // Get column and values to update
-        IEnumerable<SqliteColumn> columns = Columns.Where(column => column != PrimaryKey);
-        IEnumerable<object?> values = columns.Select(column => column.GetValue(row));
-
-        // Ensure at least one column will be updated
-        if (!columns.Any()) {
-            return 0;
+        // Build update query
+        SqlBuilder<T> builder = Build();
+        foreach (SqliteColumn column in Columns) {
+            // Strip primary key column from update
+            if (column.IsPrimaryKey) {
+                continue;
+            }
+            builder.Update(column.Name, builder.AddParameter(column.GetValue(row)));
         }
-
-        // Build update SQL with parameters
-        List<object?> parameters = [.. values, PrimaryKey.GetValue(row)];
-        string columnsSql = string.Join(",", columns.Select(column => $"{column.Name.SqlQuote()} = ?"));
-        string query = $"update {Name.SqlQuote()} set {columnsSql} where {PrimaryKey.Name.SqlQuote()} = ?";
+        // Add primary key condition
+        builder.Where($"{PrimaryKey.Name.SqlQuote()} = {builder.AddParameter(PrimaryKey.GetValue(row))}");
 
         // Execute update
-        int rowCount = Connection.Execute(query, parameters);
+        int rowCount = builder.Execute();
         return rowCount;
     }
     /// <inheritdoc cref="UpdateOne(T)"/>
@@ -370,11 +384,13 @@ public class SqliteTable<T> : SqliteTable where T : notnull, new() {
             throw new NotSupportedException($"Can't delete in table '{Name}' since it has no annotated primary key");
         }
 
-        // Build delete SQL
-        string query = $"delete from {Name.SqlQuote()} where {PrimaryKey.Name.SqlQuote()} = ?";
+        // Build delete query
+        SqlBuilder<T> builder = Build().Delete();
+        // Add primary key condition
+        builder.Where($"{PrimaryKey.Name.SqlQuote()} = {builder.AddParameter(primaryKey)}");
 
         // Execute delete
-        int rowCount = Connection.Execute(query, primaryKey);
+        int rowCount = builder.Execute();
         return rowCount;
     }
     /// <inheritdoc cref="DeleteByKey(object)"/>
@@ -480,9 +496,15 @@ public class SqliteTable<T> : SqliteTable where T : notnull, new() {
         return Task.Run(() => CreateIndex(property, unique));
     }
 
+    /// <summary>
+    /// Finds the name of the SQLite column mapped to the CLR member with the given name.
+    /// </summary>
     public string MemberNameToColumnName(string memberName) {
         return Columns.First(column => column.ClrMember.Name == memberName).Name;
     }
+    /// <summary>
+    /// Finds the name of the CLR member mapped to the SQLite column with the given name.
+    /// </summary>
     public string ColumnNameToMemberName(string columnName) {
         return Columns.First(column => column.Name == columnName).ClrMember.Name;
     }
@@ -520,7 +542,7 @@ public class SqliteTable<T> : SqliteTable where T : notnull, new() {
     }
     private void CreateOrMigrateTable() {
         // Create new table
-        if (!Connection.TableExists(Name)) {
+        if (!Connection.GetTables(Name).Any()) {
             // Add virtual table modifiers
             string virtualModifier = VirtualModule is not null ? "virtual" : "";
             string usingModifier = VirtualModule is not null ? $"using {VirtualModule.SqlQuote()}" : "";
@@ -539,7 +561,7 @@ public class SqliteTable<T> : SqliteTable where T : notnull, new() {
         // Migrate existing table
         else {
             // Get columns already in the table
-            List<ColumnInfo> existingColumns = Connection.GetTableInfo(Name).ToList();
+            List<ColumnInfo> existingColumns = Connection.GetColumns(Name).ToList();
 
             // Get new columns to add
             List<SqliteColumn> newColumns = Columns.Where(

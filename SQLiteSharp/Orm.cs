@@ -58,31 +58,37 @@ public class Orm {
     public string GetSqlDeclaration(SqliteColumn column) {
         TypeSerializer typeSerializer = GetTypeSerializer(column.ClrType);
 
-        string declaration = $"{column.Name.SqlQuote()} {GetTypeSql(typeSerializer.SqliteType).SqlQuote()} ";
+        string declaration = $"{column.Name.SqlQuote()} {GetTypeSql(typeSerializer.SqliteType).SqlQuote()}";
 
         if (column.IsPrimaryKey) {
-            declaration += "primary key ";
+            declaration += " primary key";
         }
         if (column.IsAutoIncremented) {
-            declaration += "autoincrement ";
+            declaration += " autoincrement";
         }
         if (column.IsNotNull) {
-            declaration += "not null ";
+            declaration += " not null";
         }
         if (column.IsUnique) {
-            declaration += "unique ";
+            declaration += " unique";
         }
         if (column.Collation is not null) {
-            declaration += $"collate {column.Collation.SqlQuote()} ";
+            declaration += $" collate {column.Collation.SqlQuote()}";
         }
         if (column.Check is not null) {
-            declaration += $"check ({column.Check.SqlQuote()}) ";
+            declaration += $" check {column.Check.SqlQuote("'")}";
         }
 
         return declaration;
     }
 
     private void AddDefaultTypeSerializers() {
+        RegisterType<SqliteValue>(
+            // This type serializer for SqliteValue is only included to allow columns to receive typeless values from built-in pragmas like table_info.
+            SqliteType.Any,
+            serialize: (SqliteValue clr) => clr,
+            deserialize: (SqliteValue sqlite, Type clrType) => sqlite
+        );
         RegisterType<bool>(
             SqliteType.Integer,
             serialize: (bool clr) => clr ? 1 : 0,

@@ -12,7 +12,7 @@ public class AliasAttribute(string? name) : Attribute {
 }
 
 /// <summary>
-/// The table will be created without an implicit <c>rowid</c> (see <see href="https://sqlite.org/withoutrowid.html"/>).<br/>
+/// The table will be created without an implicit <c>rowid</c> (see <see href="https://sqlite.org/withoutrowid.html"/>).
 /// </summary>
 [AttributeUsage(AttributeTargets.Class | AttributeTargets.Struct)]
 public class WithoutRowIdAttribute() : Attribute {
@@ -54,7 +54,7 @@ public class IndexAttribute(string? name = null) : Attribute {
     /// <summary>
     /// If <see langword="true"/>, every row must have a unique value for this index.
     /// </summary>
-    public virtual bool Unique { get; set; }
+    public bool Unique { get; set; }
 }
 
 /// <summary>

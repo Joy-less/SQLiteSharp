@@ -24,11 +24,12 @@ public class SqlBuilder<T> where T : notnull, new() {
 
     private int CurrentParameterIndex;
 
-    public SqlBuilder(SqliteTable<T> table) {
+    internal SqlBuilder(SqliteTable<T> table) {
         Table = table;
 
         AddDefaultSqlConverters();
     }
+
     public SqlBuilder<T> Select() {
         SelectList.Add($"{Table.Name.SqlQuote()}.*");
         return this;
@@ -77,8 +78,8 @@ public class SqlBuilder<T> where T : notnull, new() {
         UpdateList.Add($"{Table.Name.SqlQuote()}.{columnName.SqlQuote()}", newValueExpression);
         return this;
     }
-    public SqlBuilder<T> Insert(string columnName, object? value) {
-        InsertList.Add($"{Table.Name.SqlQuote()}.{columnName.SqlQuote()}", AddParameter(value));
+    public SqlBuilder<T> Insert(string columnName, string valueExpression) {
+        InsertList.Add($"{Table.Name.SqlQuote()}.{columnName.SqlQuote()}", valueExpression);
         return this;
     }
     public SqlBuilder<T> Delete() {
@@ -98,10 +99,10 @@ public class SqlBuilder<T> where T : notnull, new() {
                 builder.AppendLine($"group by {string.Join(",", GroupByList)}");
             }
             if (WhereList.Count > 0) {
-                builder.AppendLine($"where {string.Join(",", WhereList)}");
+                builder.AppendLine($"where {string.Join(" and ", WhereList)}");
             }
             if (HavingList.Count > 0) {
-                builder.AppendLine($"having {string.Join(",", HavingList)}");
+                builder.AppendLine($"having {string.Join(" and ", HavingList)}");
             }
             if (LimitCount >= 0) {
                 builder.AppendLine($"limit {LimitCount}");
@@ -116,7 +117,7 @@ public class SqlBuilder<T> where T : notnull, new() {
             builder.AppendLine($"update {Table.Name.SqlQuote()}");
             builder.AppendLine($"set {string.Join(",", updateList.Select(update => $"{update.Key} = {update.Value}"))}");
             if (WhereList.Count > 0) {
-                builder.AppendLine($"where {string.Join(",", WhereList)}");
+                builder.AppendLine($"where {string.Join(" and ", WhereList)}");
             }
             if (LimitCount >= 0) {
                 builder.AppendLine($"limit {LimitCount}");
@@ -129,10 +130,15 @@ public class SqlBuilder<T> where T : notnull, new() {
         if (InsertList.Count > 0) {
             List<KeyValuePair<string, string>> insertList = [.. InsertList];
             builder.AppendLine($"insert into {Table.Name.SqlQuote()}");
-            builder.AppendLine($"({insertList.Select(insert => insert.Key)})");
-            builder.AppendLine($"values ({insertList.Select(insert => insert.Value)})");
+            if (insertList.Count == 0) {
+                builder.AppendLine("default values");
+            }
+            else {
+                builder.AppendLine($"({insertList.Select(insert => insert.Key)})");
+                builder.AppendLine($"values ({insertList.Select(insert => insert.Value)})");
+            }
             if (WhereList.Count > 0) {
-                builder.AppendLine($"where {string.Join(",", WhereList)}");
+                builder.AppendLine($"where {string.Join(" and ", WhereList)}");
             }
             if (LimitCount >= 0) {
                 builder.AppendLine($"limit {LimitCount}");
@@ -145,7 +151,7 @@ public class SqlBuilder<T> where T : notnull, new() {
         if (DeleteFlag) {
             builder.AppendLine($"delete from {Table.Name.SqlQuote()}");
             if (WhereList.Count > 0) {
-                builder.AppendLine($"where {string.Join(",", WhereList)}");
+                builder.AppendLine($"where {string.Join(" and ", WhereList)}");
             }
             if (LimitCount >= 0) {
                 builder.AppendLine($"limit {LimitCount}");
