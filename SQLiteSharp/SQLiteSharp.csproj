@@ -17,8 +17,13 @@
     <PackageTags>SQLite;SQL;database;ORM</PackageTags>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <PackageRequireLicenseAcceptance>True</PackageRequireLicenseAcceptance>
+    <PackageIcon>SQLette Face.png</PackageIcon>
   </PropertyGroup>
   <ItemGroup>
+    <None Include="..\Assets\SQLette Face.png">
+      <Pack>True</Pack>
+      <PackagePath>\</PackagePath>
+    </None>
     <None Include="..\README.md">
       <Pack>True</Pack>
       <PackagePath>\</PackagePath>

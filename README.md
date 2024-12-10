@@ -2,7 +2,7 @@
 
 SQLiteSharp is a powerful library to help you access a SQLite database in C#.
 
-<img src="https://github.com/Joy-less/SQLiteSharp/blob/2f66fbe97c68d18a8cad89ad4c00978eba73976b/Assets/SQLette.png" width=200>
+<img src="https://github.com/Joy-less/SQLiteSharp/blob/main/Assets/SQLette.png?raw=true" width=200>
 
 _SQLette protecting your database schema from getting corrupted._
 
@@ -116,7 +116,7 @@ SQLiteSharp uses versions like "1.0" and "2.4".
 
 ## SQLette
 
-<img src="https://github.com/Joy-less/SQLiteSharp/blob/2f66fbe97c68d18a8cad89ad4c00978eba73976b/Assets/SQLette.png" width=512>
+<img src="https://github.com/Joy-less/SQLiteSharp/blob/main/Assets/SQLette.png?raw=true" width=512>
 
 _Created with [FurryToonMixV2](https://civitai.com/models/470339/furrytoonmixv2)_
 
