@@ -1,5 +1,7 @@
 # SQLiteSharp
 
+[![NuGet](https://img.shields.io/nuget/v/SQLiteSharp.svg)](https://www.nuget.org/packages/SQLiteSharp)
+
 SQLiteSharp is a powerful library to help you access a SQLite database in C#.
 
 <img src="https://github.com/Joy-less/SQLiteSharp/blob/main/Assets/SQLette%20Face.png?raw=true" width=220>
