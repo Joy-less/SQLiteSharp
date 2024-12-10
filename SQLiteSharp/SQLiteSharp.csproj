@@ -15,6 +15,8 @@
     <PackageReadmeFile>README.md</PackageReadmeFile>
     <RepositoryUrl>https://github.com/Joy-less/SQLiteSharp</RepositoryUrl>
     <PackageTags>SQLite;SQL;database;ORM</PackageTags>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PackageRequireLicenseAcceptance>True</PackageRequireLicenseAcceptance>
   </PropertyGroup>
   <ItemGroup>
     <Compile Remove="LinqToSQL\**" />
