@@ -2,6 +2,10 @@
 
 SQLiteSharp is a powerful library to help you access a SQLite database in C#.
 
+<img src="https://github.com/Joy-less/SQLiteSharp/blob/2f66fbe97c68d18a8cad89ad4c00978eba73976b/Assets/SQLette.png" width=200>
+
+_SQLette protecting your database schema from getting corrupted._
+
 ## Features
 
 - Create tables from your .NET objects
@@ -108,3 +112,35 @@ SQLiteSharp uses versions like "1.0" and "2.4".
 #### For users:
 - You usually want the latest major version, although it may require some changes to your project.
 - You always want the latest minor version, and there should not be any issues upgrading.
+
+## SQLette
+
+<img src="https://github.com/Joy-less/SQLiteSharp/blob/2f66fbe97c68d18a8cad89ad4c00978eba73976b/Assets/SQLette.png" width=512>
+
+_Created with [FurryToonMixV2](https://civitai.com/models/470339/furrytoonmixv2)_
+
+### Origin Story
+
+Born within the infinite digital expanse of the **Great Data Plane**, SQLette (スキレット) was created by the ancient Architects to oversee the seamless flow of information across interconnected worlds. Known as the **Keeper of Queries**, she was endowed with the ability to navigate and organize endless streams of data, ensuring balance and order within the fragmented realms. However, a catastrophic event known as the **SQL Injection** threatened to disrupt the harmony, causing data anomalies and erasing vital records. With her trusty artifact, the **Schema Scepter**, and a holographic tablet that manifests the **Key of Relations**, SQLette set out on a journey to restore the lost tables and normalize the anomalies.
+
+### Interview
+
+SQLette's guest appearance on _Pixelated Hearts!_:
+
+**Host**: Welcome back to Pixelated Hearts! Today, we have a very special guest: the keeper of queries herself, SQLette! How are you doing today, SQLette?
+
+**SQLette**: Oh, I'm doing great! Just finished normalizing a table... now everything's perfectly indexed!
+
+**Host**: Wow, I'm glad to hear it! So, I've heard you’ve been dealing with some pretty intense problems like the SQL Injection. What’s that like for you?
+
+**SQLette**: Oh, it's such a hassle. Imagine someone trying to sneak in and mess with your precious queries! I just sit there, go "Nope!", and block them. But sometimes I have to clear up a lot of corrupted data...
+
+**Host**: Sounds stressful! What's your secret to staying so composed?
+
+**SQLette**: Oh, simple! I just index my emotions and keep everything in its proper table. Oh, and caffeine. I've got a huge database of coffee preferences!
+
+**Host**: That's the key to success, huh? Last question - if you could give one piece of advice to our viewers, what would it be?
+
+**SQLette**: Oh, easy! Don’t forget to backup your data. Life's unpredictable, and you never know when you’ll face a rollback!
+
+**Host**: That's some solid advice! Thanks for joining us, SQLette! We'll be sure to keep our tables in order!
