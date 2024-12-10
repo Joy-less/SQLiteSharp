@@ -9,9 +9,10 @@ _SQLette protecting your database schema from getting corrupted._
 ## Features
 
 - Create tables from your .NET objects
-- Manage your database with SQL commands and No-SQL functions
-- Use synchronous and asynchronous APIs
-- Encrypt your database with a password or key
+- Annotate members as primary keys, foreign keys, not null, unique, indexed and more
+- Manage your database with No-SQL APIs
+- Use synchronous and asynchronous functions
+- Encrypt your database with SQLCipher
 
 ## Background
 
