@@ -132,7 +132,7 @@ SQLette's guest appearance on _Pixelated Hearts!_:
 
 **SQLette**: Oh, I'm doing great! Just finished normalizing a table... now everything's perfectly indexed!
 
-**Host**: Wow, I'm glad to hear it! So, I've heard you’ve been dealing with some pretty intense problems like the SQL Injection. What’s that like for you?
+**Host**: Wow, I'm glad to hear it! So, I've heard you've been dealing with some pretty intense problems like the SQL Injection. What's that like for you?
 
 **SQLette**: Oh, it's such a hassle. Imagine someone trying to sneak in and mess with your precious queries! I just sit there, go "Nope!", and block them. But sometimes I have to clear up a lot of corrupted data...
 
@@ -142,6 +142,6 @@ SQLette's guest appearance on _Pixelated Hearts!_:
 
 **Host**: That's the key to success, huh? Last question - if you could give one piece of advice to our viewers, what would it be?
 
-**SQLette**: Oh, easy! Don’t forget to backup your data. Life's unpredictable, and you never know when you’ll face a rollback!
+**SQLette**: Oh, easy! Don't forget to backup your data. Life's unpredictable, and you never know when you'll face a rollback!
 
 **Host**: That's some solid advice! Thanks for joining us, SQLette! We'll be sure to keep our tables in order!
