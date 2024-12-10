@@ -66,9 +66,10 @@ List<ShopItem> Bananas = ShopItems.Find(ShopItem => ShopItem.ItemName == "Banana
 
 ## Custom Type Serialization
 
-SQLiteSharp supports serialization for a set of common types, but custom types must be registered.
+SQLiteSharp supports serialization for a set of common types.
+Polymorphism is supported, so you can register `object` as a fallback for all missing types.
 
-Type serialization is polymorphic, so you can register `object` as a fallback for all missing types.
+By default, unregistered types are serialized as JSON using `System.Text.Json`.
 
 ```cs
 public class SweetWrapper {
@@ -94,7 +95,7 @@ Connection.Orm.RegisterType<Sweet>(
 ## Notes
 
 - Tables are automatically migrated to add new tables and columns, however changed columns are not updated.
-- SqliteConnections are not thread-safe and should not be used concurrently. However, you can open multiple SqliteConnections concurrently, as they use SQLite's built-in FullMutex.
+- A SqliteConnection should not be used by multiple threads. However, multiple SqliteConnections can be opened and used concurrently, since they use SQLite's built-in `FullMutex`.
 
 ## Versioning Guide
 
