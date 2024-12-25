@@ -37,15 +37,19 @@ public class SqliteCommand(SqliteConnection connection) {
     /// </returns>
     public int Execute() {
         Sqlite3Statement statement = Prepare();
-        Result result = SqliteRaw.Step(statement);
-        SqliteRaw.Finalize(statement);
+        try {
+            Result result = SqliteRaw.Step(statement);
 
-        if (result is Result.Done) {
-            int rowCount = SqliteRaw.Changes(Connection.Handle);
-            return rowCount;
+            if (result is Result.Done) {
+                int rowCount = SqliteRaw.Changes(Connection.Handle);
+                return rowCount;
+            }
+            else {
+                throw new SqliteException(result, SqliteRaw.GetErrorMessage(Connection.Handle));
+            }
         }
-        else {
-            throw new SqliteException(result, SqliteRaw.GetErrorMessage(Connection.Handle));
+        finally {
+            SqliteRaw.Finalize(statement);
         }
     }
     /// <summary>
@@ -85,29 +89,39 @@ public class SqliteCommand(SqliteConnection connection) {
     public IEnumerable<T> ExecuteQuery<T>(SqliteTable<T> table) where T : notnull, new() {
         Sqlite3Statement statement = Prepare();
         try {
-            while (SqliteRaw.Step(statement) is Result.Row) {
-                // Create row object
-                T row = new();
+            while (true) {
+                Result result = SqliteRaw.Step(statement);
 
-                // Iterate through found columns
-                int columnCount = SqliteRaw.GetColumnCount(statement);
-                for (int i = 0; i < columnCount; i++) {
-                    // Get name of found column
-                    string columnName = SqliteRaw.GetColumnName(statement, i);
+                if (result is Result.Row) {
+                    // Create row object
+                    T row = new();
 
-                    // Find mapped column with same name
-                    if (table.Columns.FirstOrDefault(column => column.Name == columnName) is not SqliteColumn column) {
-                        continue;
+                    // Iterate through found columns
+                    int columnCount = SqliteRaw.GetColumnCount(statement);
+                    for (int i = 0; i < columnCount; i++) {
+                        // Get name of found column
+                        string columnName = SqliteRaw.GetColumnName(statement, i);
+
+                        // Find mapped column with same name
+                        if (table.Columns.FirstOrDefault(column => column.Name == columnName) is not SqliteColumn column) {
+                            continue;
+                        }
+
+                        // Read value from found column
+                        object? value = ReadColumn(statement, i, column.ClrType);
+                        column.SetValue(row, value);
                     }
 
-                    // Read value from found column
-                    object? value = ReadColumn(statement, i, column.ClrType);
-                    column.SetValue(row, value);
+                    // Return row object
+                    OnInstanceCreated?.Invoke(row);
+                    yield return row;
                 }
-
-                // Return row object
-                OnInstanceCreated?.Invoke(row);
-                yield return row;
+                else if (result is Result.Done) {
+                    break;
+                }
+                else {
+                    throw new SqliteException(result, SqliteRaw.GetErrorMessage(Connection.Handle));
+                }
             }
         }
         finally {
