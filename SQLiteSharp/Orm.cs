@@ -59,7 +59,7 @@ public class Orm {
         TypeSerializers[type] = new TypeSerializer(type, sqliteType, serialize, deserialize);
     }
     /// <inheritdoc cref="RegisterType(Type, SqliteType, Func{object, SqliteValue}, Func{SqliteValue, Type, object?})"/>
-    public void RegisterType<T>(SqliteType sqliteType, Func<T, SqliteValue> serialize, Func<SqliteValue, Type, object?> deserialize) {
+    public void RegisterType<T>(SqliteType sqliteType, Func<T, SqliteValue> serialize, Func<SqliteValue, Type, T?> deserialize) {
         RegisterType(typeof(T), sqliteType, (object clr) => serialize((T)clr), (SqliteValue sqlite, Type clrType) => deserialize(sqlite, clrType));
     }
     /// <summary>
@@ -259,7 +259,7 @@ public class Orm {
         RegisterType<Enum>(
             SqliteType.Integer,
             serialize: (Enum clr) => Convert.ToInt64(clr),
-            deserialize: (SqliteValue sqlite, Type clrType) => Enum.ToObject(clrType, sqlite.AsInteger)
+            deserialize: (SqliteValue sqlite, Type clrType) => (Enum)Enum.ToObject(clrType, sqlite.AsInteger)
         );
         RegisterType<StringBuilder>(
             SqliteType.Text,
