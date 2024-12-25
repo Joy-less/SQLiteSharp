@@ -95,7 +95,7 @@ using SQLiteConnection Connection = new(":memory:");
 Connection.Orm.RegisterType<Sweet>(
     SqliteType.Text,
     serialize: (Sweet Sweet) => JsonSerializer.Serialize(Sweet),
-    deserialize: (SqliteValue Value, Type ClrType) => JsonSerializer.Deserialize(Value.AsText, ClrType)
+    deserialize: (SqliteValue Value, Type ClrType) => (Sweet?)JsonSerializer.Deserialize(Value.AsText, ClrType)
 );
 ```
 
