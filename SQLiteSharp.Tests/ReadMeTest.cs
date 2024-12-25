@@ -53,9 +53,9 @@ public class ReadMeTest {
             Sweet = new Sweet("orange"),
         });
 
-        // Find one item in the table matching a predicate
-        //SweetWrapper? Sweet = Connection.Table<SweetWrapper>().FirstOrDefault();
-        //Assert.NotNull(Sweet);
+        // Find the first item in the table
+        SweetWrapper? Sweet = Sweets.FindAll().FirstOrDefault();
+        Assert.NotNull(Sweet);
     }
 }
 
