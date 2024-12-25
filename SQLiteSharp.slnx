@@ -1,0 +1,4 @@
+<Solution>
+  <Project Path="SQLiteSharp/SQLiteSharp.csproj" />
+  <Project Path="SQLiteSharp.Tests/SQLiteSharp.Tests.csproj" />
+</Solution>
