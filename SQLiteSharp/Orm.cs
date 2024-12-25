@@ -264,7 +264,7 @@ public class Orm {
         RegisterType<StringBuilder>(
             SqliteType.Text,
             serialize: (StringBuilder clr) => clr.ToString(),
-            deserialize: (SqliteValue sqlite, Type clrType) => sqlite.AsText
+            deserialize: (SqliteValue sqlite, Type clrType) => new StringBuilder(sqlite.AsText)
         );
         RegisterType<Guid>(
             SqliteType.Text,
