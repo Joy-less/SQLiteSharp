@@ -198,7 +198,9 @@ public class SqliteTable<T> where T : notnull, new() {
         // Auto-increment columns
         foreach (SqliteColumn column in Columns) {
             if (column.IsAutoIncremented) {
+                // Get inserted row ID
                 long rowId = SqliteRaw.GetLastInsertRowId(Connection.Handle);
+                // Map row ID
                 column.SetSqliteValue(row, rowId);
             }
         }

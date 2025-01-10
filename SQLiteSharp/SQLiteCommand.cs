@@ -109,7 +109,11 @@ public class SqliteCommand(SqliteConnection connection) {
 
                         // Read value from found column
                         object? value = ReadColumn(statement, i, column.ClrType);
-                        column.SetValue(row, value);
+
+                        // Map read value (boxing value types)
+                        object boxedRow = row;
+                        column.SetValue(boxedRow, value);
+                        row = (T)boxedRow;
                     }
 
                     // Return row object
@@ -152,28 +156,31 @@ public class SqliteCommand(SqliteConnection connection) {
         TypeSerializer typeSerializer = Connection.Orm.GetTypeSerializer(value.GetType());
         SqliteValue rawValue = typeSerializer.Serialize(value);
 
-        switch (rawValue.SqliteType) {
-            case SqliteType.Null:
-                SqliteRaw.BindNull(statement, index);
-                break;
-            case SqliteType.Integer:
-                SqliteRaw.BindInt64(statement, index, rawValue.AsInteger);
-                break;
-            case SqliteType.Float:
-                SqliteRaw.BindDouble(statement, index, rawValue.AsFloat);
-                break;
-            case SqliteType.Text:
-                SqliteRaw.BindText(statement, index, rawValue.AsText);
-                break;
-            case SqliteType.Blob:
-                SqliteRaw.BindBlob(statement, index, rawValue.AsBlob);
-                break;
-            default:
-                throw new NotImplementedException($"Cannot bind column type '{rawValue.SqliteType}'");
+        if (rawValue.IsNull) {
+            SqliteRaw.BindNull(statement, index);
+        }
+        else {
+            switch (rawValue.SqliteType) {
+                case SqliteType.Integer:
+                    SqliteRaw.BindInt64(statement, index, rawValue.CastInteger);
+                    break;
+                case SqliteType.Float:
+                    SqliteRaw.BindDouble(statement, index, rawValue.CastFloat);
+                    break;
+                case SqliteType.Text:
+                    SqliteRaw.BindText(statement, index, rawValue.CastText);
+                    break;
+                case SqliteType.Blob:
+                    SqliteRaw.BindBlob(statement, index, rawValue.CastBlob);
+                    break;
+                default:
+                    throw new NotImplementedException($"Cannot bind column type '{rawValue.SqliteType}'");
+            }
         }
     }
     private object? ReadColumn(Sqlite3Statement statement, int index, Type type) {
-        return Connection.Orm.Deserialize(SqliteRaw.GetColumnValue(statement, index), type);
+        SqliteValue rawValue = SqliteRaw.GetColumnValue(statement, index);
+        return Connection.Orm.Deserialize(rawValue, type);
     }
 }
 

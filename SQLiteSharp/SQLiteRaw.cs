@@ -66,6 +66,9 @@ public static class SqliteRaw {
     public static SqliteType GetColumnType(Sqlite3Statement statement, int index) {
         return (SqliteType)Sqlite3.sqlite3_column_type(statement, index);
     }
+    public static string GetColumnDeclaredType(Sqlite3Statement statement, int index) {
+        return Sqlite3.sqlite3_column_decltype(statement, index).utf8_to_string();
+    }
     public static int GetColumnInt(Sqlite3Statement statement, int index) {
         return Sqlite3.sqlite3_column_int(statement, index);
     }
@@ -248,44 +251,59 @@ public enum SqliteType {
     Null = Sqlite3.SQLITE_NULL,
 }
 
+/// <summary>
+/// A value that can be stored in a SQLite database.
+/// </summary>
 public readonly struct SqliteValue {
-    public static SqliteValue Null { get; } = new();
+    /// <summary>
+    /// A null value of type <see cref="SqliteType.Null"/>.
+    /// </summary>
+    public static SqliteValue Null { get; } = new(SqliteType.Null);
 
-    public SqliteType SqliteType { get; } = SqliteType.Null;
+    public SqliteType SqliteType { get; }
+    public long? AsInteger { get; }
+    public double? AsFloat { get; }
+    public string? AsText { get; }
+    public byte[]? AsBlob { get; }
 
-    private readonly long? Integer;
-    private readonly double? Float;
-    private readonly string? Text;
-    private readonly byte[]? Blob;
-
+    private SqliteValue(SqliteType sqliteType) {
+        SqliteType = sqliteType;
+    }
     private SqliteValue(long? @integer) {
         SqliteType = SqliteType.Integer;
-        Integer = @integer;
+        AsInteger = @integer;
     }
     private SqliteValue(double? @float) {
         SqliteType = SqliteType.Float;
-        Float = @float;
+        AsFloat = @float;
     }
     private SqliteValue(string? @text) {
         SqliteType = SqliteType.Text;
-        Text = @text;
+        AsText = @text;
     }
     private SqliteValue(byte[]? @blob) {
         SqliteType = SqliteType.Blob;
-        Blob = @blob;
+        AsBlob = @blob;
     }
 
     public object? AsObject => SqliteType switch {
-        SqliteType.Integer => Integer,
-        SqliteType.Float => Float,
-        SqliteType.Text => Text,
-        SqliteType.Blob => Blob,
+        SqliteType.Integer => AsInteger,
+        SqliteType.Float => AsFloat,
+        SqliteType.Text => AsText,
+        SqliteType.Blob => AsBlob,
         SqliteType.Null or _ => null,
     };
-    public long AsInteger => (long)AsObject!;
-    public double AsFloat => (double)AsObject!;
-    public string AsText => (string)AsObject!;
-    public byte[] AsBlob => (byte[])AsObject!;
+    public bool IsNull => SqliteType switch {
+        SqliteType.Integer => AsInteger is null,
+        SqliteType.Float => AsFloat is null,
+        SqliteType.Text => AsText is null,
+        SqliteType.Blob => AsBlob is null,
+        SqliteType.Null or _ => true,
+    };
+    public long CastInteger => AsInteger ?? throw new NullReferenceException("SqliteValue was null");
+    public double CastFloat => AsFloat ?? throw new NullReferenceException("SqliteValue was null");
+    public string CastText => AsText ?? throw new NullReferenceException("SqliteValue was null");
+    public byte[] CastBlob => AsBlob ?? throw new NullReferenceException("SqliteValue was null");
 
     public static implicit operator SqliteValue(long? value) => new(value);
     public static implicit operator SqliteValue(double? value) => new(value);

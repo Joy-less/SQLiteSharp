@@ -1,3 +1,5 @@
+using System.Text.Json;
+
 namespace SQLiteSharp.Tests;
 
 public class ReadMeTest {
@@ -41,8 +43,8 @@ public class ReadMeTest {
         // Register custom type
         Connection.Orm.RegisterType<Sweet>(
             SqliteType.Text,
-            serialize: (Sweet Sweet) => System.Text.Json.JsonSerializer.Serialize(Sweet),
-            deserialize: (SqliteValue Value, Type ClrType) => (Sweet?)System.Text.Json.JsonSerializer.Deserialize(Value.AsText, ClrType)
+            serialize: (Sweet Sweet) => JsonSerializer.Serialize(Sweet),
+            deserialize: (SqliteValue Value, Type ClrType) => (Sweet?)JsonSerializer.Deserialize(Value.CastText, ClrType)
         );
 
         // Create a table for a class

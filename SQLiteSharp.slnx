@@ -1,4 +1,7 @@
 <Solution>
   <Project Path="SQLiteSharp/SQLiteSharp.csproj" />
+  <Folder Name="/Solution Items/">
+    <File Path="README.md" />
+  </Folder>
   <Project Path="SQLiteSharp.Tests/SQLiteSharp.Tests.csproj" />
 </Solution>
