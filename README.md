@@ -99,10 +99,15 @@ Connection.Orm.RegisterType<Sweet>(
 );
 ```
 
-## Notes
+## Tips
 
-- Tables are automatically migrated to add new tables and columns, however changed columns are not updated.
-- A SqliteConnection should not be used by multiple threads. However, multiple SqliteConnections can be opened and used concurrently, since they use SQLite's built-in `FullMutex`.
+### Automatic Schema Migration
+
+Tables are automatically migrated to add new tables and columns, however existing columns are not modified.
+
+### Thread Safety
+
+A SqliteConnection should not be used by multiple threads. However, multiple SqliteConnections can be opened and used concurrently, since they use SQLite's built-in `FullMutex`.
 
 ## Versioning Guide
 
