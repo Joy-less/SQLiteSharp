@@ -22,5 +22,7 @@ public class OperatorTest {
         // Find one item in the table matching a predicate with method calls
         ShopItem? Item2 = ShopItems.FindOne(ShopItem => !string.IsNullOrEmpty(ShopItem.ItemName) && ShopItem.ItemName.Replace("dragon", "drag") == "dragfruit");
         Assert.NotNull(Item2);
+
+        ShopItem? Item3 = ShopItems.FindOne(ShopItem => int.Parse(ShopItem.Count.ToString()).Equals(1));
     }
 }

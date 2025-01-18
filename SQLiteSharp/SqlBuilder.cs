@@ -663,6 +663,82 @@ public class SqlBuilder<T> where T : notnull, new() {
             string valueSql = ExpressionToSql(methodCall.Arguments[0], rowExpression);
             return $"atan({valueSql})";
         },
+
+        // int.ToString()
+        [typeof(int).GetMethod(nameof(int.ToString), [])!] = (methodCall, rowExpression) => {
+            string intSql = ExpressionToSql(methodCall.Object!, rowExpression);
+            return $"cast({intSql} as text)";
+        },
+
+        // int.Parse(string)
+        [typeof(int).GetMethod(nameof(int.Parse), [typeof(string)])!] = (methodCall, rowExpression) => {
+            string strSql = ExpressionToSql(methodCall.Arguments[0], rowExpression);
+            return $"cast({strSql} as integer)";
+        },
+
+        // int.Equals(int)
+        [typeof(int).GetMethod(nameof(int.Equals), [typeof(int)])!] = (methodCall, rowExpression) => {
+            string int1Sql = ExpressionToSql(methodCall.Object!, rowExpression);
+            string int2Sql = ExpressionToSql(methodCall.Arguments[0], rowExpression);
+            return $"{int1Sql} = {int2Sql}";
+        },
+
+        // long.ToString()
+        [typeof(long).GetMethod(nameof(long.ToString), [])!] = (methodCall, rowExpression) => {
+            string longSql = ExpressionToSql(methodCall.Object!, rowExpression);
+            return $"cast({longSql} as text)";
+        },
+
+        // long.Parse(string)
+        [typeof(long).GetMethod(nameof(long.Parse), [typeof(string)])!] = (methodCall, rowExpression) => {
+            string strSql = ExpressionToSql(methodCall.Arguments[0], rowExpression);
+            return $"cast({strSql} as integer)";
+        },
+
+        // long.Equals(long)
+        [typeof(long).GetMethod(nameof(long.Equals), [typeof(long)])!] = (methodCall, rowExpression) => {
+            string long1Sql = ExpressionToSql(methodCall.Object!, rowExpression);
+            string long2Sql = ExpressionToSql(methodCall.Arguments[0], rowExpression);
+            return $"{long1Sql} = {long2Sql}";
+        },
+
+        // float.ToString()
+        [typeof(float).GetMethod(nameof(float.ToString), [])!] = (methodCall, rowExpression) => {
+            string floatSql = ExpressionToSql(methodCall.Object!, rowExpression);
+            return $"cast({floatSql} as text)";
+        },
+
+        // float.Parse(string)
+        [typeof(float).GetMethod(nameof(float.Parse), [typeof(string)])!] = (methodCall, rowExpression) => {
+            string strSql = ExpressionToSql(methodCall.Arguments[0], rowExpression);
+            return $"cast({strSql} as integer)";
+        },
+
+        // float.Equals(float)
+        [typeof(float).GetMethod(nameof(float.Equals), [typeof(float)])!] = (methodCall, rowExpression) => {
+            string float1Sql = ExpressionToSql(methodCall.Object!, rowExpression);
+            string float2Sql = ExpressionToSql(methodCall.Arguments[0], rowExpression);
+            return $"{float1Sql} = {float2Sql}";
+        },
+
+        // double.ToString()
+        [typeof(double).GetMethod(nameof(double.ToString), [])!] = (methodCall, rowExpression) => {
+            string doubleSql = ExpressionToSql(methodCall.Object!, rowExpression);
+            return $"cast({doubleSql} as text)";
+        },
+
+        // double.Parse(string)
+        [typeof(double).GetMethod(nameof(double.Parse), [typeof(string)])!] = (methodCall, rowExpression) => {
+            string doubleSql = ExpressionToSql(methodCall.Arguments[0], rowExpression);
+            return $"cast({doubleSql} as integer)";
+        },
+
+        // double.Equals(double)
+        [typeof(double).GetMethod(nameof(double.Equals), [typeof(double)])!] = (methodCall, rowExpression) => {
+            string double1Sql = ExpressionToSql(methodCall.Object!, rowExpression);
+            string double2Sql = ExpressionToSql(methodCall.Arguments[0], rowExpression);
+            return $"{double1Sql} = {double2Sql}";
+        },
     };
     private Dictionary<MemberInfo, Func<MemberExpression, ParameterExpression, string>> GetDefaultMemberToSqlConverters() => new() {
         // string.Length
