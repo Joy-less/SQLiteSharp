@@ -31,9 +31,11 @@
     </None>
   </ItemGroup>
   <ItemGroup>
-    <PackageReference Include="PolySharp" Version="1.15.0" />
     <PackageReference Include="SQLitePCLRaw.bundle_e_sqlcipher" Version="2.1.10" />
     <PackageReference Include="System.Linq.Async" Version="6.0.1" />
     <PackageReference Include="System.Text.Json" Version="9.0.1" />
+  </ItemGroup>
+  <ItemGroup Condition=" '$(TargetFramework)' == 'netstandard2.0'">
+    <PackageReference Include="PolySharp" Version="1.15.0" />
   </ItemGroup>
 </Project>
