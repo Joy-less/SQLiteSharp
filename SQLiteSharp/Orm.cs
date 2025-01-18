@@ -23,7 +23,7 @@ public class Orm {
     /// <remarks>
     /// This predicate is ignored if the member has a <see cref="PrimaryKeyAttribute"/>.
     /// </remarks>
-    public Func<MemberInfo, bool> IsImplicitPrimaryKey { get; set; } = Member => Member.Name == "Id";
+    public Func<MemberInfo, bool> IsImplicitPrimaryKey { get; set; } = Member => Member.Name is "Id";
     /// <summary>
     /// A predicate deciding whether an index should be made for the member even if it lacks a <see cref="IndexAttribute"/>.<br/>
     /// By default, returns <see langword="true"/> if the member's name ends with "Id".
@@ -64,7 +64,7 @@ public class Orm {
     }
     /// <summary>
     /// Gets a type serializer for the given (non-nullable) type.<br/>
-    /// If not found for the exact type, the type's implemented or inherited interfaces are searched.<br/>
+    /// If not found for the exact type, the type's interfaces are searched.<br/>
     /// If not found for an interface, the type's base types are searched.
     /// </summary>
     public TypeSerializer GetTypeSerializer(Type type) {
