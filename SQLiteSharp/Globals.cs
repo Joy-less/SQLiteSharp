@@ -20,11 +20,11 @@ public static class Globals {
     /// <remarks>
     /// The default quote character is only suitable for identifiers. String literals should use "<c>'</c>".
     /// </remarks>
-    public static string SqlQuote(this string? unsafeString, string QuoteChar = "\"") {
+    public static string SqlQuote(this string? unsafeString, string quote = "\"") {
         if (unsafeString is null) {
             return "null";
         }
-        return $"{QuoteChar}{unsafeString.Replace(QuoteChar, $"{QuoteChar}{QuoteChar}")}{QuoteChar}";
+        return $"{quote}{unsafeString.Replace(quote, $"{quote}{quote}")}{quote}";
     }
     /// <summary>
     /// Gets the value of the member if it's a property or field.
