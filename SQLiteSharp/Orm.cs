@@ -169,7 +169,7 @@ public class Orm {
         RegisterType<bool>(
             SqliteType.Integer,
             serialize: (bool clr) => clr ? 1 : 0,
-            deserialize: (SqliteValue sqlite, Type clrType) => (int)sqlite.CastInteger != 0
+            deserialize: (SqliteValue sqlite, Type clrType) => sqlite.CastInteger != 0
         );
         RegisterType<string>(
             SqliteType.Text,
