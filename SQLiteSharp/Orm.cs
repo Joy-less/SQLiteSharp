@@ -2,6 +2,8 @@ using System.Collections.Concurrent;
 using System.Text;
 using System.Text.Json;
 using System.Reflection;
+using System.Text.Encodings.Web;
+using System.Text.Json.Serialization;
 
 namespace SQLiteSharp;
 
@@ -150,10 +152,12 @@ public class Orm {
 
     private void AddDefaultTypeSerializers() {
         JsonSerializerOptions jsonOptions = new() {
+            NumberHandling = JsonNumberHandling.AllowNamedFloatingPointLiterals | JsonNumberHandling.AllowReadingFromString,
+            AllowTrailingCommas = true,
             IncludeFields = true,
             NewLine = "\n",
-            AllowTrailingCommas = true,
             ReadCommentHandling = JsonCommentHandling.Skip,
+            Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
         };
         RegisterType<object>(
             sqliteType: SqliteType.Text,
