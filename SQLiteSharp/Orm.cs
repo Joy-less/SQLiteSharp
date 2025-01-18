@@ -231,6 +231,13 @@ public class Orm {
             serialize: (double clr) => clr,
             deserialize: (SqliteValue sqlite, Type clrType) => sqlite.CastFloat
         );
+#if NET5_0_OR_GREATER
+        RegisterType<Half>(
+            SqliteType.Float,
+            serialize: (Half clr) => (double)clr,
+            deserialize: (SqliteValue sqlite, Type clrType) => (Half)sqlite.CastFloat
+        );
+#endif
         RegisterType<TimeSpan>(
             SqliteType.Integer,
             serialize: (TimeSpan clr) => clr.Ticks,
