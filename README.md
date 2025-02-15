@@ -129,7 +129,7 @@ _Created with [FurryToonMixV2](https://civitai.com/models/470339/furrytoonmixv2)
 
 ### Origin Story
 
-Born within the infinite digital expanse of the **Great Data Plane**, SQLette (スキレット) was created by the ancient Architects to oversee the seamless flow of information across interconnected worlds. Known as the **Keeper of Queries**, she was endowed with the ability to navigate and organize endless streams of data, ensuring balance and order within the fragmented realms. However, a catastrophic event known as the **SQL Injection** threatened to disrupt the harmony, causing data anomalies and erasing vital records. With her trusty artifact, the **Schema Scepter**, and a holographic tablet that manifests the **Key of Relations**, SQLette set out on a journey to restore the lost tables and normalize the anomalies.
+Born within the infinite digital expanse of the **Great Data Plane**, SQLette (シクレット) was created by the ancient Architects to oversee the seamless flow of information across interconnected worlds. Known as the **Keeper of Queries**, she was endowed with the ability to navigate and organize endless streams of data, ensuring balance and order within the fragmented realms. However, a catastrophic event known as the **SQL Injection** threatened to disrupt the harmony, causing data anomalies and erasing vital records. With her trusty artifact, the **Schema Scepter**, and a holographic tablet that manifests the **Key of Relations**, SQLette set out on a journey to restore the lost tables and normalize the anomalies.
 
 ### Interview
 
