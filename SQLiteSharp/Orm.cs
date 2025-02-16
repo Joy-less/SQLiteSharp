@@ -252,6 +252,18 @@ public class Orm {
             serialize: (DateTime clr) => clr.Ticks,
             deserialize: (SqliteValue sqlite, Type clrType) => new DateTime(sqlite.CastInteger)
         );
+#if NET6_0_OR_GREATER
+        RegisterType<DateOnly>(
+            SqliteType.Integer,
+            serialize: (DateOnly clr) => clr.ToDateTime(TimeOnly.MinValue).Ticks,
+            deserialize: (SqliteValue sqlite, Type clrType) => DateOnly.FromDateTime(new DateTime(sqlite.CastInteger))
+        );
+        RegisterType<TimeOnly>(
+            SqliteType.Integer,
+            serialize: (TimeOnly clr) => clr.Ticks,
+            deserialize: (SqliteValue sqlite, Type clrType) => new TimeOnly(sqlite.CastInteger)
+        );
+#endif
         RegisterType<Uri>(
             SqliteType.Text,
             serialize: (Uri clr) => clr.AbsoluteUri,
