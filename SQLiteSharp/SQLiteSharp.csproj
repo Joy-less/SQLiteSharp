@@ -5,7 +5,11 @@
     <LangVersion>latest</LangVersion>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
+
+    <!-- IDE0130: Namespace does not match folder structure -->
+    <!-- CS1573: Parameter has no matching param tag in the XML comment (but other parameters do) -->
     <NoWarn>IDE0130;CS1573</NoWarn>
+
     <GenerateDocumentationFile>True</GenerateDocumentationFile>
     <GeneratePackageOnBuild>True</GeneratePackageOnBuild>
     <PackageId>SQLiteSharp</PackageId>
