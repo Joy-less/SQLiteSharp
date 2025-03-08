@@ -320,9 +320,12 @@ public class SqlBuilder<T> where T : notnull, new() {
         ExpressionType.OrElse => "or",
         ExpressionType.Equal => "=",
         ExpressionType.NotEqual => "!=",
-        ExpressionType.Add => "+",
-        ExpressionType.Subtract => "-",
-        ExpressionType.Multiply => "*",
+        ExpressionType.Add
+        or ExpressionType.AddChecked => "+",
+        ExpressionType.Subtract
+        or ExpressionType.SubtractChecked => "-",
+        ExpressionType.Multiply
+        or ExpressionType.MultiplyChecked => "*",
         ExpressionType.Divide => "/",
         ExpressionType.Modulo => "%",
         ExpressionType.OnesComplement => "~",
