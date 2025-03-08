@@ -207,8 +207,8 @@ public class SqliteTable<T> where T : notnull, new() {
         return rowCount;
     }
     /// <inheritdoc cref="Insert(T, string?)"/>
-    public Task<int> InsertAsync(T row, string? orModifier = null) {
-        return Task.Run(() => Insert(row, orModifier));
+    public Task<int> InsertAsync(T row, string? modifier = null) {
+        return Task.Run(() => Insert(row, modifier));
     }
 
     /// <inheritdoc cref="Insert(T, string?)"/>
