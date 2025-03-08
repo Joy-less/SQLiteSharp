@@ -194,7 +194,7 @@ public partial class SqliteConnection : IDisposable {
     /// Put <c>@</c> (or <c>:</c> / <c>$</c>) in the command text followed by an identifier for each argument.<br/>
     /// For example, <c>@name</c>, <c>:name</c> or <c>$name</c>.
     /// </summary>
-    public SqliteCommand CreateCommand(string commandText, IDictionary<string, object?> parameters) {
+    public SqliteCommand CreateCommand(string commandText, IReadOnlyDictionary<string, object?> parameters) {
         SqliteCommand command = new(this) {
             CommandText = commandText,
             Parameters = parameters.Select(parameter => new SqliteCommandParameter(parameter.Key, parameter.Value)),
@@ -219,12 +219,12 @@ public partial class SqliteConnection : IDisposable {
     }
 
     /// <inheritdoc cref="Execute(string, IEnumerable{object?})"/>
-    public int Execute(string query, IDictionary<string, object?> parameters) {
+    public int Execute(string query, IReadOnlyDictionary<string, object?> parameters) {
         SqliteCommand command = CreateCommand(query, parameters);
         return command.Execute();
     }
-    /// <inheritdoc cref="Execute(string, IDictionary{string, object?})"/>
-    public Task<int> ExecuteAsync(string query, IDictionary<string, object?> parameters) {
+    /// <inheritdoc cref="Execute(string, IReadOnlyDictionary{string, object?})"/>
+    public Task<int> ExecuteAsync(string query, IReadOnlyDictionary<string, object?> parameters) {
         return Task.Run(() => Execute(query, parameters));
     }
 
@@ -245,12 +245,12 @@ public partial class SqliteConnection : IDisposable {
     }
 
     /// <inheritdoc cref="ExecuteScalars{T}(string, IEnumerable{object?})"/>
-    public IEnumerable<T> ExecuteScalars<T>(string query, IDictionary<string, object?> parameters) {
+    public IEnumerable<T> ExecuteScalars<T>(string query, IReadOnlyDictionary<string, object?> parameters) {
         SqliteCommand command = CreateCommand(query, parameters);
         return command.ExecuteScalars<T>();
     }
-    /// <inheritdoc cref="ExecuteScalars{T}(string, IDictionary{string, object?})"/>
-    public Task<IEnumerable<T>> ExecuteScalarsAsync<T>(string query, IDictionary<string, object?> parameters) {
+    /// <inheritdoc cref="ExecuteScalars{T}(string, IReadOnlyDictionary{string, object?})"/>
+    public Task<IEnumerable<T>> ExecuteScalarsAsync<T>(string query, IReadOnlyDictionary<string, object?> parameters) {
         return Task.Run(() => ExecuteScalars<T>(query, parameters));
     }
 

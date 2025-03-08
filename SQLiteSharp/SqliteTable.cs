@@ -88,11 +88,11 @@ public class SqliteTable<T> where T : notnull, new() {
     }
 
     /// <inheritdoc cref="ExecuteQuery(string, IEnumerable{object?})"/>
-    public IEnumerable<T> ExecuteQuery(string query, IDictionary<string, object?> parameters) {
+    public IEnumerable<T> ExecuteQuery(string query, IReadOnlyDictionary<string, object?> parameters) {
         return Connection.CreateCommand(query, parameters).ExecuteQuery(this);
     }
     /// <inheritdoc cref="ExecuteQuery(string, IEnumerable{object?})"/>
-    public IAsyncEnumerable<T> ExecuteQueryAsync(string query, IDictionary<string, object?> parameters) {
+    public IAsyncEnumerable<T> ExecuteQueryAsync(string query, IReadOnlyDictionary<string, object?> parameters) {
         return ExecuteQuery(query, parameters).ToAsyncEnumerable();
     }
 
