@@ -13,7 +13,7 @@ public record struct SqliteConnectionOptions(string DatabasePath) {
     /// </summary>
     public OpenFlags OpenFlags { get; set; } = OpenFlags.Recommended;
     /// <summary>
-    /// The 256-bit (32-byte) encryption key to encrypt/decrypt the database.
+    /// The optional 256-bit (32-byte) encryption key to encrypt/decrypt the database.
     /// </summary>
     public byte[]? EncryptionKey { get; set; } = null;
     /// <summary>
