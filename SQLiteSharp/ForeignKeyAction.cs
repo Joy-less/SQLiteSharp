@@ -12,7 +12,7 @@ public enum ForeignKeyAction {
     [EnumMember(Value = "NO ACTION")]
     NoAction,
     /// <summary>
-    /// The referenced key cannot be changed while it still has references.
+    /// The referenced key is prevented from being changed while it is still referenced.
     /// </summary>
     [EnumMember(Value = "RESTRICT")]
     Restrict,
@@ -22,7 +22,7 @@ public enum ForeignKeyAction {
     [EnumMember(Value = "SET NULL")]
     SetNull,
     /// <summary>
-    /// The references are set to the default value if the referenced key is changed.
+    /// The references are set to their default value if the referenced key is changed.
     /// </summary>
     [EnumMember(Value = "SET DEFAULT")]
     SetDefault,
