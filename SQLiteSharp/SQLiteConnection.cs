@@ -390,7 +390,7 @@ public partial class SqliteConnection : IDisposable {
         }
     }
     /// <inheritdoc cref="Backup(string, string)"/>
-    public Task BackupAsync(string destinationDatabasePath, string databaseName = "main") {
-        return Task.Run(() => Backup(destinationDatabasePath, databaseName));
+    public Task BackupAsync(string destinationPath, string databaseName = "main") {
+        return Task.Run(() => Backup(destinationPath, databaseName));
     }
 }
