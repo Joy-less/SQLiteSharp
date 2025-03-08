@@ -61,6 +61,12 @@ public static class Globals {
         else if (expression is ConstantExpression constantExpression) {
             return constantExpression.Value;
         }
+        else if (expression is DefaultExpression defaultExpression) {
+            if (defaultExpression.Type.IsValueType) {
+                return Activator.CreateInstance(defaultExpression.Type);
+            }
+            return null;
+        }
         else {
             return Expression.Lambda(expression).Compile().DynamicInvoke();
         }
