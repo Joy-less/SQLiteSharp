@@ -35,7 +35,7 @@
     </None>
   </ItemGroup>
   <ItemGroup>
-    <PackageReference Include="SQLitePCLRaw.bundle_e_sqlcipher" Version="2.1.10" />
+    <PackageReference Include="SQLitePCLRaw.bundle_e_sqlcipher" Version="2.1.11" />
     <PackageReference Include="System.Linq.Async" Version="6.0.1" />
     <PackageReference Include="System.Text.Json" Version="9.0.2" />
   </ItemGroup>
