@@ -4,6 +4,9 @@ using SQLitePCL;
 
 namespace SQLiteSharp;
 
+/// <summary>
+/// Provides low-level access to SQLite. This is a wrapper over <see cref="Sqlite3"/>.
+/// </summary>
 public static class SqliteRaw {
     public static Result Open(string filename, out Sqlite3DatabaseHandle db, OpenFlags flags, string? vfsName) {
         return (Result)Sqlite3.sqlite3_open_v2(filename, out db, (int)flags, vfsName);
@@ -132,6 +135,9 @@ public static class SqliteRaw {
     }
 }
 
+/// <summary>
+/// A simplified result code from a SQLite operation.
+/// </summary>
 public enum Result {
     OK = Sqlite3.SQLITE_OK,
     Error = Sqlite3.SQLITE_ERROR,
@@ -165,6 +171,9 @@ public enum Result {
     Row = Sqlite3.SQLITE_ROW,
     Done = Sqlite3.SQLITE_DONE,
 }
+/// <summary>
+/// A full result code from a SQLite operation.
+/// </summary>
 public enum ExtendedResult {
     IOErrorRead = Sqlite3.SQLITE_IOERR_READ,
     IOErrorShortRead = Sqlite3.SQLITE_IOERR_SHORT_READ,
@@ -242,6 +251,9 @@ public enum OpenFlags {
     Recommended = Create | ReadWrite | FullMutex | Wal,
 }
 
+/// <summary>
+/// The storage class of a value that can be stored in a SQLite database.
+/// </summary>
 public enum SqliteType {
     Any = 0,
     Integer = Sqlite3.SQLITE_INTEGER,
