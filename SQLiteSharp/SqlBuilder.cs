@@ -343,7 +343,7 @@ public class SqlBuilder<T> where T : notnull, new() {
         or StringComparison.CurrentCulture => Collation.Invariant,
         StringComparison.InvariantCultureIgnoreCase
         or StringComparison.CurrentCultureIgnoreCase => Collation.InvariantNoCase,
-        _ => throw new NotImplementedException($"{stringComparison.GetType()}")
+        _ => throw new NotImplementedException($"{stringComparison}")
     };
 
     /// <summary>
