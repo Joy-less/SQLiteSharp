@@ -46,10 +46,12 @@ public class ForeignKeyAttribute(string foreignTable, string foreignColumn) : At
     /// </summary>
     public string ForeignColumn { get; set; } = foreignColumn;
     /// <summary>
-    /// The action to complete when the foreign key is changed.
+    /// The action to complete when the row referenced by the foreign key is deleted.
     /// </summary>
     public ForeignKeyAction OnDelete { get; set; } = ForeignKeyAction.NoAction;
-    /// <inheritdoc cref="OnDelete"/>
+    /// <summary>
+    /// The action to complete when the foreign key is changed.
+    /// </summary>
     public ForeignKeyAction OnUpdate { get; set; } = ForeignKeyAction.NoAction;
 }
 
