@@ -371,7 +371,7 @@ public class SqlBuilder<T> where T : notnull, new() {
     public string MemberExpressionToColumnName(LambdaExpression expression) {
         Expression body = expression.Body;
         // Unwrap type cast
-        if (body is UnaryExpression unaryExpression && unaryExpression.NodeType is ExpressionType.Convert) {
+        if (body is UnaryExpression unaryExpression && unaryExpression.NodeType is ExpressionType.Convert or ExpressionType.ConvertChecked) {
             body = unaryExpression.Operand;
         }
         // Ensure body is member expression
