@@ -42,7 +42,10 @@ public class SqlBuilder<T> where T : notnull, new() {
 
     private int ParameterCounter;
 
-    internal SqlBuilder(SqliteTable<T> table) {
+    /// <summary>
+    /// Constructs a <see cref="SqlBuilder{T}"/> to build and execute a complex SQL query using the fluent style.
+    /// </summary>
+    public SqlBuilder(SqliteTable<T> table) {
         Table = table;
 
         MethodToSqlConverters = GetDefaultMethodToSqlConverters();
