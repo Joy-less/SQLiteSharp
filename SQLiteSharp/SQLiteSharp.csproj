@@ -28,13 +28,13 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <None Include="..\Assets\SQLette Face.png">
+    <None Include="../Assets/SQLette Face.png">
       <Pack>True</Pack>
-      <PackagePath>\</PackagePath>
+      <PackagePath>/</PackagePath>
     </None>
-    <None Include="..\README.md">
+    <None Include="../README.md">
       <Pack>True</Pack>
-      <PackagePath>\</PackagePath>
+      <PackagePath>/</PackagePath>
     </None>
   </ItemGroup>
 
