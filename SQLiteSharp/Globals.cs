@@ -77,6 +77,6 @@ public static class Globals {
     public static string ToEnumString(this Enum @enum) {
         string enumName = @enum.ToString();
         string? enumMemberName = @enum.GetType().GetField(enumName)?.GetCustomAttribute<EnumMemberAttribute>()?.Value;
-        return enumMemberName ?? @enum.ToString();
+        return enumMemberName ?? enumName;
     }
 }
