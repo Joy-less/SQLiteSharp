@@ -65,7 +65,9 @@ public static class Globals {
             if (defaultExpression.Type.IsValueType) {
                 return Activator.CreateInstance(defaultExpression.Type);
             }
-            return null;
+            else {
+                return null;
+            }
         }
         else {
             return Expression.Lambda(expression).Compile().DynamicInvoke();
