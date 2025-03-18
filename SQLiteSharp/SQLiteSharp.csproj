@@ -21,7 +21,7 @@
     <PackageProjectUrl>https://github.com/Joy-less/SQLiteSharp</PackageProjectUrl>
     <PackageReadmeFile>README.md</PackageReadmeFile>
     <RepositoryUrl>https://github.com/Joy-less/SQLiteSharp</RepositoryUrl>
-    <PackageTags>SQLite;SQL;database;ORM</PackageTags>
+    <PackageTags>SQLite; SQL; NoSQL; database; ORM; efcore; entity framework</PackageTags>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <PackageRequireLicenseAcceptance>True</PackageRequireLicenseAcceptance>
     <PackageIcon>SQLette Face.png</PackageIcon>
