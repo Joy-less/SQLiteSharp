@@ -17,11 +17,11 @@ public class OperatorTest {
 
         // Find one item in the table matching a predicate
         ShopItem? Item = ShopItems.FindOne(ShopItem => ShopItem.Count == (ShopItem.Count * 2 - ShopItem.Count));
-        Assert.NotNull(Item);
+        Item.ShouldNotBeNull();
 
         // Find one item in the table matching a predicate with method calls
         ShopItem? Item2 = ShopItems.FindOne(ShopItem => !string.IsNullOrEmpty(ShopItem.ItemName) && ShopItem.ItemName.Replace("dragon", "drag") == "dragfruit");
-        Assert.NotNull(Item2);
+        Item2.ShouldNotBeNull();
 
         ShopItem? Item3 = ShopItems.FindOne(ShopItem => int.Parse(ShopItem.Count.ToString()).Equals(1));
     }

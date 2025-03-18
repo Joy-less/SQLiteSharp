@@ -18,29 +18,29 @@ public class NullableTest {
 
         // Find one item in the table matching a predicate
         NullableItem Item = NullableItems.FindAll().First();
-        Assert.Null(Item.NullableIntWithNullValue);
-        Assert.Equal(3, Item.NullableIntWithNonNullValue);
-        Assert.Equal(4, Item.NonNullableInt);
+        Item.NullableIntWithNullValue.ShouldBeNull();
+        Item.NullableIntWithNonNullValue.ShouldBe(3);
+        Item.NonNullableInt.ShouldBe(4);
     }
     [Fact]
     public void TestSqliteValue() {
         // Test nullable integer with non-null value
         SqliteValue NullableIntWithNullValue = (long?)null;
-        Assert.Throws<NullReferenceException>(() => NullableIntWithNullValue.CastInteger);
-        Assert.Null(NullableIntWithNullValue.AsInteger);
-        Assert.True(NullableIntWithNullValue.IsNull);
+        Should.Throw<NullReferenceException>(() => NullableIntWithNullValue.CastInteger);
+        NullableIntWithNullValue.AsInteger.ShouldBeNull();
+        NullableIntWithNullValue.IsNull.ShouldBeTrue();
 
         // Test nullable integer with non-null value
         SqliteValue NullableIntWithNonNullValue = (long?)3;
-        Assert.Equal(3, NullableIntWithNonNullValue.CastInteger);
-        Assert.Equal(3, NullableIntWithNonNullValue.AsInteger);
-        Assert.False(NullableIntWithNonNullValue.IsNull);
+        NullableIntWithNonNullValue.CastInteger.ShouldBe(3);
+        NullableIntWithNonNullValue.AsInteger.ShouldBe(3);
+        NullableIntWithNonNullValue.IsNull.ShouldBe(false);
 
         // Test non-nullable integer
         SqliteValue NonNullableInt = (long)4;
-        Assert.Equal(4, NonNullableInt.CastInteger);
-        Assert.Equal(4, NonNullableInt.AsInteger);
-        Assert.False(NonNullableInt.IsNull);
+        NonNullableInt.CastInteger.ShouldBe(4);
+        NonNullableInt.AsInteger.ShouldBe(4);
+        NonNullableInt.IsNull.ShouldBe(false);
     }
 }
 

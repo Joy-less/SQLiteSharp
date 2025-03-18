@@ -26,14 +26,14 @@ public class ReadMeTest {
 
         // Find one item in the table matching a predicate
         ShopItem? Apple = ShopItems.FindOne(ShopItem => ShopItem.ItemName == "Apple");
-        Assert.NotNull(Apple);
+        Apple.ShouldNotBeNull();
 
         // Delete an item from the table
         ShopItems.DeleteByKey(Apple.Id);
 
         // Find several items in the table
         List<ShopItem> Bananas = ShopItems.Find(ShopItem => ShopItem.ItemName == "Banana").ToList();
-        Assert.Single(Bananas);
+        Bananas.ShouldHaveSingleItem();
     }
     [Fact]
     public void Test2() {
@@ -57,7 +57,7 @@ public class ReadMeTest {
 
         // Find the first item in the table
         SweetWrapper? Sweet = Sweets.FindAll().FirstOrDefault();
-        Assert.NotNull(Sweet);
+        Sweet.ShouldNotBeNull();
     }
 }
 
