@@ -1,9 +1,9 @@
 using System.Collections.Concurrent;
 using System.Text;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using System.Reflection;
 using System.Text.Encodings.Web;
-using System.Text.Json.Serialization;
 
 namespace SQLiteSharp;
 

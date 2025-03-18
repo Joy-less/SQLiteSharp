@@ -117,7 +117,7 @@ public class SqliteTable<T> where T : notnull, new() {
     public T? FindByKey(object primaryKey) {
         // Ensure table has primary key
         if (PrimaryKey is null) {
-            throw new NotSupportedException($"Can't find in table '{Name}' since it has no annotated primary key");
+            throw new NotSupportedException($"Can't find by key in table '{Name}' since it has no annotated primary key");
         }
 
         // Build select SQL

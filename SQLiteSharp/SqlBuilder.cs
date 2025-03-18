@@ -1,7 +1,8 @@
+using System.Text;
 using System.Diagnostics.CodeAnalysis;
 using System.Linq.Expressions;
 using System.Reflection;
-using System.Text;
+using System.Runtime.Serialization;
 
 namespace SQLiteSharp;
 
@@ -63,7 +64,7 @@ public class SqlBuilder<T> where T : notnull, new() {
     /// Adds a <c>select(...)</c> statement for every column.
     /// </summary>
     public SqlBuilder<T> Select(SelectType selectType) {
-        SelectList.Add($"{selectType}(*)");
+        SelectList.Add($"{selectType.ToEnumString()}(*)");
         return this;
     }
     /// <summary>
@@ -77,7 +78,7 @@ public class SqlBuilder<T> where T : notnull, new() {
     /// Adds a <c>select(...)</c> statement for a specific column.
     /// </summary>
     public SqlBuilder<T> Select(string columnName, SelectType selectType) {
-        SelectList.Add($"{selectType}({Table.Name.SqlQuote()}.{columnName.SqlQuote()})");
+        SelectList.Add($"{selectType.ToEnumString()}({Table.Name.SqlQuote()}.{columnName.SqlQuote()})");
         return this;
     }
     /// <summary>
@@ -763,29 +764,36 @@ public enum SelectType {
     /// <summary>
     /// The mean (average) of the values.
     /// </summary>
-    Avg,
+    [EnumMember(Value = "avg")]
+    Average,
     /// <summary>
     /// The number of non-null values.
     /// </summary>
+    [EnumMember(Value = "count")]
     Count,
     /// <summary>
     /// The string concatenation of the non-null values.
     /// </summary>
-    Group_Concat,
+    [EnumMember(Value = "group_concat")]
+    GroupConcat,
     /// <summary>
     /// The minimum non-null value.
     /// </summary>
+    [EnumMember(Value = "min")]
     Min,
     /// <summary>
     /// The maximum non-null value.
     /// </summary>
+    [EnumMember(Value = "max")]
     Max,
     /// <summary>
     /// The sum (addition) of all the non-null values.
     /// </summary>
+    [EnumMember(Value = "sum")]
     Sum,
     /// <summary>
     /// Similar to <see cref="Sum"/> but always returns a floating-point value (even if there are only integers or null).
     /// </summary>
+    [EnumMember(Value = "total")]
     Total,
 }
