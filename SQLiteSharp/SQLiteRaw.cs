@@ -312,10 +312,10 @@ public readonly struct SqliteValue {
         SqliteType.Blob => AsBlob is null,
         SqliteType.Null or _ => true,
     };
-    public long CastInteger => AsInteger ?? throw new NullReferenceException("SqliteValue was null");
-    public double CastFloat => AsFloat ?? throw new NullReferenceException("SqliteValue was null");
-    public string CastText => AsText ?? throw new NullReferenceException("SqliteValue was null");
-    public byte[] CastBlob => AsBlob ?? throw new NullReferenceException("SqliteValue was null");
+    public long CastInteger => AsInteger ?? throw new NullReferenceException($"{nameof(SqliteValue)} was null");
+    public double CastFloat => AsFloat ?? throw new NullReferenceException($"{nameof(SqliteValue)} was null");
+    public string CastText => AsText ?? throw new NullReferenceException($"{nameof(SqliteValue)} was null");
+    public byte[] CastBlob => AsBlob ?? throw new NullReferenceException($"{nameof(SqliteValue)} was null");
 
     public static implicit operator SqliteValue(long? value) => new(value);
     public static implicit operator SqliteValue(double? value) => new(value);
