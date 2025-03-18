@@ -9,7 +9,9 @@
     <!-- IDE0130: Namespace does not match folder structure -->
     <!-- CS1573: Parameter has no matching param tag in the XML comment (but other parameters do) -->
     <NoWarn>IDE0130;CS1573</NoWarn>
+  </PropertyGroup>
 
+  <PropertyGroup>
     <GenerateDocumentationFile>True</GenerateDocumentationFile>
     <GeneratePackageOnBuild>True</GeneratePackageOnBuild>
     <PackageId>SQLiteSharp</PackageId>
@@ -24,6 +26,7 @@
     <PackageRequireLicenseAcceptance>True</PackageRequireLicenseAcceptance>
     <PackageIcon>SQLette Face.png</PackageIcon>
   </PropertyGroup>
+
   <ItemGroup>
     <None Include="..\Assets\SQLette Face.png">
       <Pack>True</Pack>
@@ -34,6 +37,7 @@
       <PackagePath>\</PackagePath>
     </None>
   </ItemGroup>
+
   <ItemGroup>
     <PackageReference Include="SQLitePCLRaw.bundle_e_sqlcipher" Version="2.1.11" />
     <PackageReference Include="System.Linq.Async" Version="6.0.1" />
