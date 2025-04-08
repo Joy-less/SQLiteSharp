@@ -5,6 +5,7 @@ global using Sqlite3Statement = SQLitePCL.sqlite3_stmt;
 
 using System.Linq.Expressions;
 using System.Reflection;
+using System.Runtime.CompilerServices;
 using System.Runtime.Serialization;
 
 namespace SQLiteSharp;
@@ -58,20 +59,20 @@ public static class Globals {
         if (expression is null) {
             return null;
         }
-        else if (expression is ConstantExpression constantExpression) {
+        if (expression is ConstantExpression constantExpression) {
             return constantExpression.Value;
         }
-        else if (expression is DefaultExpression defaultExpression) {
+        if (expression is DefaultExpression defaultExpression) {
             if (defaultExpression.Type.IsValueType) {
-                return Activator.CreateInstance(defaultExpression.Type);
+#if !NETSTANDARD2_0
+                return RuntimeHelpers.GetUninitializedObject(defaultExpression.Type);
+#endif
             }
             else {
                 return null;
             }
         }
-        else {
-            return Expression.Lambda(expression).Compile().DynamicInvoke();
-        }
+        return Expression.Lambda(expression).Compile().DynamicInvoke();
     }
     /// <summary>
     /// Converts the enum to a string using <see cref="EnumMemberAttribute"/> if present.
