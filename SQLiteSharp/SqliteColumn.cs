@@ -73,7 +73,7 @@ public class SqliteColumn {
         ForeignKey = member.GetCustomAttribute<ForeignKeyAttribute>();
 
         IsAutoIncremented = member.GetCustomAttribute<AutoIncrementAttribute>() is not null
-            || Connection.Orm.IsImplicitAutoIncremented(member);
+            || Connection.Orm.IsImplicitAutoIncrement(member);
 
         IsNotNull = member.GetCustomAttribute<NotNullAttribute>() is not null
             || IsPrimaryKey;

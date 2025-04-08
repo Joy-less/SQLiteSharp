@@ -41,7 +41,7 @@ public class Orm {
     /// <remarks>
     /// This predicate is ignored if the member has an <see cref="AutoIncrementAttribute"/>.
     /// </remarks>
-    public Func<MemberInfo, bool> IsImplicitAutoIncremented { get; set; } = Member => false;
+    public Func<MemberInfo, bool> IsImplicitAutoIncrement { get; set; } = Member => false;
 
     /// <summary>
     /// A global instance of <see cref="Orm"/> used as the default for <see cref="SqliteConnectionOptions.Orm"/>.
