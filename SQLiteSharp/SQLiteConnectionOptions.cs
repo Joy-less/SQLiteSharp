@@ -19,7 +19,7 @@ public record struct SqliteConnectionOptions(string DatabasePath) {
     /// <summary>
     /// The Object-Relational Mapper to map CLR members to SQLite columns.
     /// </summary>
-    public Orm? Orm { get; set; } = null;
+    public Orm Orm { get; set; } = Orm.Default;
     /// <summary>
     /// The string comparison collations to create in addition to the built-in collations.<br/><br/>
     /// By default:

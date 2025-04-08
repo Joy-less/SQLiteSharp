@@ -30,7 +30,7 @@ public partial class SqliteConnection : IDisposable {
     /// </summary>
     public SqliteConnection(SqliteConnectionOptions options) {
         Options = options;
-        Orm = options.Orm ?? Orm.Default;
+        Orm = options.Orm;
 
         // Try to open database
         Result openResult = SqliteRaw.Open(options.DatabasePath, out Sqlite3DatabaseHandle handle, options.OpenFlags, null);

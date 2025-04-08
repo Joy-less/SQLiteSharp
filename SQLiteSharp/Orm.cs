@@ -44,7 +44,7 @@ public class Orm {
     public Func<MemberInfo, bool> IsImplicitAutoIncremented { get; set; } = Member => false;
 
     /// <summary>
-    /// A global instance of <see cref="Orm"/> used when <see cref="SqliteConnectionOptions.Orm"/> is null.
+    /// A global instance of <see cref="Orm"/> used as the default for <see cref="SqliteConnectionOptions.Orm"/>.
     /// </summary>
     public static Orm Default { get; } = new();
 
