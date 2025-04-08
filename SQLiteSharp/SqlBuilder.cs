@@ -335,6 +335,9 @@ public class SqlBuilder<T> where T : notnull, new() {
         ExpressionType.OnesComplement => "~",
         ExpressionType.LeftShift => "<<",
         ExpressionType.RightShift => ">>",
+        ExpressionType.Negate
+        or ExpressionType.NegateChecked => "-",
+        ExpressionType.UnaryPlus => "+",
         _ => throw new NotSupportedException($"Cannot get SQL operator for {operatorType}")
     };
     /// <summary>

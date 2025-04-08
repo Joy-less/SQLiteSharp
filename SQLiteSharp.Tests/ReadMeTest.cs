@@ -35,7 +35,8 @@ public class ReadMeTest {
         List<ShopItem> Bananas = ShopItems.Find(ShopItem => ShopItem.ItemName == "Banana").ToList();
         Bananas.ShouldHaveSingleItem();
 
-        ShopItems.Find(item => string.Concat(item.ItemName, "z", "y") == "Bananazy").ShouldHaveSingleItem();
+        ShopItems.Find(item => -item.Count < 0).ShouldHaveSingleItem();
+        //ShopItems.Find(item => item.ItemName + "z" + "y" == "Bananazy").ShouldHaveSingleItem();
     }
     [Fact]
     public void Test2() {
