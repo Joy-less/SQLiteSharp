@@ -408,10 +408,16 @@ public class SqlBuilder<T> where T : notnull, new() {
             // Binary (a == b)
             case BinaryExpression binaryExpression:
                 if (TryConvertEqualsNullToIsNull(binaryExpression, rowExpression, out string? isNullSql)) {
+                    // Null check uses special syntax
                     return isNullSql;
                 }
                 if (binaryExpression.NodeType is ExpressionType.Coalesce) {
+                    // Coalesce uses method not operator
                     return $"coalesce({ExpressionToSql(binaryExpression.Left, rowExpression)}, {ExpressionToSql(binaryExpression.Right, rowExpression)})";
+                }
+                if (binaryExpression.NodeType is ExpressionType.Add or ExpressionType.AddChecked && (binaryExpression.Left.Type == typeof(string) || binaryExpression.Right.Type == typeof(string))) {
+                    // Concatenating strings uses special operator
+                    return $"({ExpressionToSql(binaryExpression.Left, rowExpression)} || {ExpressionToSql(binaryExpression.Right, rowExpression)})";
                 }
                 return $"({ExpressionToSql(binaryExpression.Left, rowExpression)} {OperatorToSql(binaryExpression.NodeType)} {ExpressionToSql(binaryExpression.Right, rowExpression)})";
 
