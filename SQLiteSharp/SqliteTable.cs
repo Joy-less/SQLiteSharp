@@ -563,12 +563,12 @@ public class SqliteTable<T> where T : notnull, new() {
         // Migrate existing table
         else {
             // Get columns already in the table
-            List<ColumnInfo> existingColumns = Connection.GetColumns(Name).ToList();
+            List<ColumnInfo> existingColumns = [.. Connection.GetColumns(Name)];
 
             // Get new columns to add
-            List<SqliteColumn> newColumns = Columns.Where(
+            List<SqliteColumn> newColumns = [.. Columns.Where(
                 column => !existingColumns.Any(existingColumn => existingColumn.Name.Equals(column.Name, StringComparison.OrdinalIgnoreCase))
-            ).ToList();
+            )];
 
             // Add new columns
             foreach (SqliteColumn column in newColumns) {
