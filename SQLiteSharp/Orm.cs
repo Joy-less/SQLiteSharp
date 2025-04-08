@@ -46,7 +46,18 @@ public class Orm {
     /// <summary>
     /// A global instance of <see cref="Orm"/> used as the default for <see cref="SqliteConnectionOptions.Orm"/>.
     /// </summary>
-    public static Orm Default { get; } = new();
+    public static Orm Default { get; set; } = new();
+    /// <summary>
+    /// A global instance of <see cref="JsonSerializerOptions"/> used as the default for JSON serialization/deserialization.
+    /// </summary>
+    public static JsonSerializerOptions DefaultJsonOptions { get; set; } = new() {
+        NumberHandling = JsonNumberHandling.AllowNamedFloatingPointLiterals | JsonNumberHandling.AllowReadingFromString,
+        AllowTrailingCommas = true,
+        IncludeFields = true,
+        NewLine = "\n",
+        ReadCommentHandling = JsonCommentHandling.Skip,
+        Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
+    };
 
     /// <summary>
     /// Constructs a new <see cref="Orm"/> with the default type serializers.
@@ -151,20 +162,11 @@ public class Orm {
     }
 
     private void AddDefaultTypeSerializers() {
-        JsonSerializerOptions jsonOptions = new() {
-            NumberHandling = JsonNumberHandling.AllowNamedFloatingPointLiterals | JsonNumberHandling.AllowReadingFromString,
-            AllowTrailingCommas = true,
-            IncludeFields = true,
-            NewLine = "\n",
-            ReadCommentHandling = JsonCommentHandling.Skip,
-            Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
-        };
         RegisterType<object>(
             sqliteType: SqliteType.Text,
-            serialize: (object clr) => JsonSerializer.Serialize(clr, jsonOptions),
-            deserialize: (SqliteValue sqlite, Type clrType) => JsonSerializer.Deserialize(sqlite.CastText, clrType, jsonOptions)!
+            serialize: (object clr) => JsonSerializer.Serialize(clr, DefaultJsonOptions),
+            deserialize: (SqliteValue sqlite, Type clrType) => JsonSerializer.Deserialize(sqlite.CastText, clrType, DefaultJsonOptions)!
         );
-
         RegisterType<SqliteValue>(
             SqliteType.Any,
             serialize: (SqliteValue clr) => clr,
