@@ -565,7 +565,7 @@ public class SqlBuilder<T> where T : notnull, new() {
         // string.IsNullOrEmpty(string)
         [typeof(string).GetMethod(nameof(string.IsNullOrEmpty), [typeof(string)])!] = (methodCall, rowExpression) => {
             string strSql = ExpressionToSql(methodCall.Arguments[0], rowExpression);
-            return $"({strSql} is null or {strSql} = '')";
+            return $"{strSql} is null or {strSql} = ''";
         },
 
         // string.Trim()
@@ -584,6 +584,30 @@ public class SqlBuilder<T> where T : notnull, new() {
         [typeof(string).GetMethod(nameof(string.TrimEnd), [])!] = (methodCall, rowExpression) => {
             string strSql = ExpressionToSql(methodCall.Object!, rowExpression);
             return $"rtrim({strSql})";
+        },
+
+        // string.Concat(string, string)
+        [typeof(string).GetMethod(nameof(string.Concat), [typeof(string), typeof(string)])!] = (methodCall, rowExpression) => {
+            string str0Sql = ExpressionToSql(methodCall.Arguments[0], rowExpression);
+            string str1Sql = ExpressionToSql(methodCall.Arguments[1], rowExpression);
+            return $"{str0Sql} || {str1Sql}";
+        },
+
+        // string.Concat(string, string, string)
+        [typeof(string).GetMethod(nameof(string.Concat), [typeof(string), typeof(string), typeof(string)])!] = (methodCall, rowExpression) => {
+            string str0Sql = ExpressionToSql(methodCall.Arguments[0], rowExpression);
+            string str1Sql = ExpressionToSql(methodCall.Arguments[1], rowExpression);
+            string str2Sql = ExpressionToSql(methodCall.Arguments[2], rowExpression);
+            return $"{str0Sql} || {str1Sql} || {str2Sql}";
+        },
+
+        // string.Concat(string, string, string, string)
+        [typeof(string).GetMethod(nameof(string.Concat), [typeof(string), typeof(string), typeof(string), typeof(string)])!] = (methodCall, rowExpression) => {
+            string str0Sql = ExpressionToSql(methodCall.Arguments[0], rowExpression);
+            string str1Sql = ExpressionToSql(methodCall.Arguments[1], rowExpression);
+            string str2Sql = ExpressionToSql(methodCall.Arguments[2], rowExpression);
+            string str3Sql = ExpressionToSql(methodCall.Arguments[3], rowExpression);
+            return $"{str0Sql} || {str1Sql} || {str2Sql} || {str3Sql})";
         },
 
         // Math.Abs(double)
