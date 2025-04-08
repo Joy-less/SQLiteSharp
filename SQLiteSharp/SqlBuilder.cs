@@ -10,7 +10,7 @@ namespace SQLiteSharp;
 /// A SQLite command builder for a table using the fluent style.<br/>
 /// </summary>
 /// <remarks>
-/// Cannot be re-used.
+/// Do not reuse.
 /// </remarks>
 public class SqlBuilder<T> where T : notnull, new() {
     /// <summary>
