@@ -17,7 +17,7 @@ public class Orm {
     /// <remarks>
     /// The types should be non-nullable, since type serializers are not used for <see langword="null"/>.
     /// </remarks>
-    public ConcurrentDictionary<Type, TypeSerializer> TypeSerializers { get; } = [];
+    public ConcurrentDictionary<Type, TypeSerializer> TypeSerializers { get; set; } = [];
     /// <summary>
     /// A predicate deciding whether the member should be made the primary key even if it lacks a <see cref="PrimaryKeyAttribute"/>.<br/>
     /// By default, returns <see langword="true"/> if the member's name is "Id".
