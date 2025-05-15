@@ -403,6 +403,10 @@ public class SqlBuilder<T> where T : notnull, new() {
 
             // Unary (!a)
             case UnaryExpression unaryExpression:
+                if (unaryExpression.NodeType is ExpressionType.Convert or ExpressionType.ConvertChecked) {
+                    // Casts not necessary with SQLite's dynamic typing
+                    return ExpressionToSql(unaryExpression.Operand, rowExpression);
+                }
                 return $"({OperatorToSql(unaryExpression.NodeType)} {ExpressionToSql(unaryExpression.Operand, rowExpression)})";
 
             // Binary (a == b)
