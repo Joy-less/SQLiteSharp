@@ -246,7 +246,7 @@ public class SqlBuilder<T> where T : notnull, new() {
         return Table.Connection.ExecuteScalars<TScalar>(GetCommand(), Parameters);
     }
     /// <inheritdoc cref="SqliteConnection.ExecuteScalarsAsync{T}(string, IReadOnlyDictionary{string, object?})"/>
-    public Task<IEnumerable<TScalar>> ExecuteScalarsAsync<TScalar>() {
+    public IAsyncEnumerable<TScalar> ExecuteScalarsAsync<TScalar>() {
         return Table.Connection.ExecuteScalarsAsync<TScalar>(GetCommand(), Parameters);
     }
     /// <inheritdoc cref="SqliteTable{T}.ExecuteQuery(string, IEnumerable{object?})"/>

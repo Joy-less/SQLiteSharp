@@ -162,8 +162,8 @@ public partial class SqliteConnection : IDisposable {
         return CreateCommand(query).ExecuteQuery(GetTablePlaceholder<TableInfo>("table_list"));
     }
     /// <inheritdoc cref="GetTables(string?)"/>
-    public Task<IEnumerable<TableInfo>> GetTablesAsync(string? tableName = null) {
-        return Task.Run(() => GetTables(tableName));
+    public IAsyncEnumerable<TableInfo> GetTablesAsync(string? tableName = null) {
+        return GetTables(tableName).ToAsyncEnumerable();
     }
 
     /// <summary>
@@ -174,8 +174,8 @@ public partial class SqliteConnection : IDisposable {
         return CreateCommand(query).ExecuteQuery(GetTablePlaceholder<ColumnInfo>("table_info"));
     }
     /// <inheritdoc cref="GetColumns(string)"/>
-    public Task<IEnumerable<ColumnInfo>> GetColumnsAsync(string tableName) {
-        return Task.Run(() => GetColumns(tableName));
+    public IAsyncEnumerable<ColumnInfo> GetColumnsAsync(string tableName) {
+        return GetColumns(tableName).ToAsyncEnumerable();
     }
 
     /// <summary>
@@ -240,8 +240,8 @@ public partial class SqliteConnection : IDisposable {
         return command.ExecuteScalars<T>();
     }
     /// <inheritdoc cref="ExecuteScalars{T}(string, IEnumerable{object?})"/>
-    public Task<IEnumerable<T>> ExecuteScalarsAsync<T>(string query, params IEnumerable<object?> parameters) {
-        return Task.Run(() => ExecuteScalars<T>(query, parameters));
+    public IAsyncEnumerable<T> ExecuteScalarsAsync<T>(string query, params IEnumerable<object?> parameters) {
+        return ExecuteScalars<T>(query, parameters).ToAsyncEnumerable();
     }
 
     /// <inheritdoc cref="ExecuteScalars{T}(string, IEnumerable{object?})"/>
@@ -250,8 +250,8 @@ public partial class SqliteConnection : IDisposable {
         return command.ExecuteScalars<T>();
     }
     /// <inheritdoc cref="ExecuteScalars{T}(string, IReadOnlyDictionary{string, object?})"/>
-    public Task<IEnumerable<T>> ExecuteScalarsAsync<T>(string query, IReadOnlyDictionary<string, object?> parameters) {
-        return Task.Run(() => ExecuteScalars<T>(query, parameters));
+    public IAsyncEnumerable<T> ExecuteScalarsAsync<T>(string query, IReadOnlyDictionary<string, object?> parameters) {
+        return ExecuteScalars<T>(query, parameters).ToAsyncEnumerable();
     }
 
     /// <summary>
