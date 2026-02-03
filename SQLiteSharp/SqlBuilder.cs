@@ -7,10 +7,10 @@ using System.Text;
 namespace SQLiteSharp;
 
 /// <summary>
-/// A SQLite command builder for a table using the fluent style.<br/>
+/// A SQLite command builder for a table using the fluent style.
 /// </summary>
 /// <remarks>
-/// Do not reuse.
+/// Do not reuse for more than one command.
 /// </remarks>
 public class SqlBuilder<T> where T : notnull, new() {
     /// <summary>
