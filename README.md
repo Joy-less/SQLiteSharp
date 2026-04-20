@@ -43,7 +43,7 @@ public class ShopItem {
 Second, open a connection to your database:
 ```cs
 // Open a database connection
-using SQLiteConnection Connection = new("database.db");
+using SqliteConnection Connection = new("database.db");
 
 // Create a table for a class
 SqliteTable<ShopItem> ShopItems = Connection.GetTable<ShopItem>();
@@ -62,7 +62,7 @@ ShopItems.Insert(new ShopItem() {
 });
 
 // Find one item in the table matching a predicate
-ShopItem? Apple = Connection.Find<ShopItem>(ShopItem => ShopItem.ItemName == "Apple");
+ShopItem? Apple = ShopItems.FindOne(ShopItem => ShopItem.ItemName == "Apple");
 
 // Delete an item from the table
 ShopItems.DeleteByKey(Apple.Id);
@@ -89,7 +89,7 @@ public class Sweet(string Flavour) {
 
 ```cs
 // Open a database connection
-using SQLiteConnection Connection = new(":memory:");
+using SqliteConnection Connection = new(":memory:");
 
 // Register custom type
 Connection.Orm.RegisterType<Sweet>(
