@@ -50,7 +50,7 @@ public partial class SqliteConnection : IDisposable {
         }
 
         // Enable/disable foreign key support
-        Execute($"pragma foreign_keys = {(options.EnableForeignKeys ? "ON" : "OFF")};");
+        Execute($"pragma foreign_keys = {(options.EnableForeignKeys ? "on" : "off")};");
     }
     /// <inheritdoc cref="SqliteConnection(SqliteConnectionOptions)"/>
     public SqliteConnection(string databasePath) : this(new SqliteConnectionOptions(databasePath)) {
