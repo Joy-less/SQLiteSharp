@@ -234,7 +234,7 @@ public class SqliteTable<T> where T : notnull, new() {
     /// </remarks>
     /// <returns>The number of rows added/modified.</returns>
     public int InsertOrReplace(T row) {
-        return Insert(row, "OR REPLACE");
+        return Insert(row, "or replace");
     }
     /// <inheritdoc cref="InsertOrReplace(T)"/>
     public Task<int> InsertOrReplaceAsync(T row) {
@@ -270,7 +270,7 @@ public class SqliteTable<T> where T : notnull, new() {
     /// </remarks>
     /// <returns>The number of rows modified.</returns>
     public int InsertOrIgnore(T row) {
-        return Insert(row, "OR IGNORE");
+        return Insert(row, "or ignore");
     }
     /// <inheritdoc cref="InsertOrIgnore(T)"/>
     public Task<int> InsertOrIgnoreAsync(T row) {
