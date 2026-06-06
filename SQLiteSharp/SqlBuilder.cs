@@ -380,7 +380,7 @@ public class SqlBuilder<T> where T : notnull, new() {
         }
         // Ensure body is member expression
         if (body is not MemberExpression memberExpression) {
-            throw new ArgumentException($"Expected MemberExpression, got '{expression.Body.GetType()}'");
+            throw new ArgumentException($"Expected {nameof(MemberExpression)}, got '{expression.Body.GetType()}'");
         }
         // Get column name from member name
         return Table.MemberNameToColumnName(memberExpression.Member.Name);
