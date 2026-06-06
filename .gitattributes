@@ -1,2 +1,7 @@
 # Auto detect text files and perform LF normalization
 * text=auto
+
+# Only include the project folders when downloading from the Asset Library.
+/**                        export-ignore
+/SQLiteSharp               !export-ignore
+/SQLiteSharp/**            !export-ignore
