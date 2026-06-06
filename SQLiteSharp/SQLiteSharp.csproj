@@ -12,6 +12,11 @@
     </PropertyGroup>
 
     <PropertyGroup>
+        <IsAotCompatible>false</IsAotCompatible>
+        <IsTrimmable>false</IsTrimmable>
+    </PropertyGroup>
+
+    <PropertyGroup>
         <GenerateDocumentationFile>true</GenerateDocumentationFile>
         <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
         <PackageId>SQLiteSharp</PackageId>
