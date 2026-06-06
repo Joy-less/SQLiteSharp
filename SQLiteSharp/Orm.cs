@@ -33,7 +33,7 @@ public class Orm {
     /// <remarks>
     /// This predicate is ignored if the member has an <see cref="IndexAttribute"/>.
     /// </remarks>
-    public Func<MemberInfo, bool> IsImplicitIndex { get; set; } = Member => Member.Name.EndsWith("Id");
+    public Func<MemberInfo, bool> IsImplicitIndex { get; set; } = Member => Member.Name.EndsWith("Id", StringComparison.Ordinal);
     /// <summary>
     /// A predicate deciding whether the member should be auto-incremented even if it lacks a <see cref="AutoIncrementAttribute"/>.<br/>
     /// By default, always returns <see langword="false"/>.
