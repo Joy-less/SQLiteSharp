@@ -131,7 +131,7 @@ public static class SqliteRaw {
         return (Result)Sqlite3.sqlite3_rekey_v2(handle, utf8z.FromString(dbName), key);
     }
     public static Result CreateCollation(Sqlite3DatabaseHandle handle, string name, Func<string, string, int> callback) {
-        return (Result)Sqlite3.sqlite3_create_collation(handle, name, null, (object userData, string str1, string str2) => callback(str1, str2));
+        return (Result)Sqlite3.sqlite3_create_collation(handle, name, null, int (object userData, string str1, string str2) => callback(str1, str2));
     }
 }
 
