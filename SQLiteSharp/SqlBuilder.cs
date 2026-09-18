@@ -300,7 +300,7 @@ public class SqlBuilder<T> where T : notnull, new() {
     }
     /// <inheritdoc cref="Update(Expression{Func{T, object?}}, Expression{Func{T, object?}})"/>
     public SqlBuilder<T> Update(Expression<Func<T, object?>> column, object? newValue) {
-        Update(column, object? (T row) => newValue);
+        Update(column, (T row) => newValue);
         return this;
     }
     /// <inheritdoc cref="Insert(string, string)"/>

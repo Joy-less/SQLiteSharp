@@ -73,7 +73,7 @@ public class Orm {
     }
     /// <inheritdoc cref="RegisterType(Type, SqliteType, Func{object, SqliteValue}, Func{SqliteValue, Type, object?})"/>
     public void RegisterType<T>(SqliteType sqliteType, Func<T, SqliteValue> serialize, Func<SqliteValue, Type, T?> deserialize) {
-        RegisterType(typeof(T), sqliteType, SqliteValue (object clr) => serialize((T)clr), object? (SqliteValue sqlite, Type clrType) => deserialize(sqlite, clrType));
+        RegisterType(typeof(T), sqliteType, (object clr) => serialize((T)clr), (SqliteValue sqlite, Type clrType) => deserialize(sqlite, clrType));
     }
     /// <summary>
     /// Gets a type serializer for the given (non-nullable) type.<br/>
