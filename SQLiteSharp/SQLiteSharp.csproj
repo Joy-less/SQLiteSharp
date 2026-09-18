@@ -7,8 +7,9 @@
         <Nullable>enable</Nullable>
 
         <!-- IDE0130: Namespace does not match folder structure -->
+        <!-- IDE0350: Lambda expression can be simplified -->
         <!-- CS1573: Parameter has no matching param tag in the XML comment (but other parameters do) -->
-        <NoWarn>IDE0130;CS1573</NoWarn>
+        <NoWarn>IDE0130;IDE0350;CS1573</NoWarn>
     </PropertyGroup>
 
     <PropertyGroup>

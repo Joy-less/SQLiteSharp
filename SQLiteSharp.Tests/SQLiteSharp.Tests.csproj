@@ -5,6 +5,9 @@
         <ImplicitUsings>enable</ImplicitUsings>
         <Nullable>enable</Nullable>
         <IsPackable>false</IsPackable>
+
+        <!-- IDE0350: Lambda expression can be simplified -->
+        <NoWarn>IDE0350</NoWarn>
     </PropertyGroup>
 
     <ItemGroup>
