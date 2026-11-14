@@ -281,21 +281,41 @@ public readonly struct SqliteValue {
     private SqliteValue(SqliteType sqliteType) {
         SqliteType = sqliteType;
     }
-    private SqliteValue(long? @integer) {
-        SqliteType = SqliteType.Integer;
-        AsInteger = @integer;
+    private SqliteValue(long? value) {
+        if (value is null) {
+            SqliteType = SqliteType.Null;
+        }
+        else {
+            SqliteType = SqliteType.Integer;
+            AsInteger = value;
+        }
     }
-    private SqliteValue(double? @float) {
-        SqliteType = SqliteType.Float;
-        AsFloat = @float;
+    private SqliteValue(double? value) {
+        if (value is null) {
+            SqliteType = SqliteType.Null;
+        }
+        else {
+            SqliteType = SqliteType.Float;
+            AsFloat = value;
+        }
     }
-    private SqliteValue(string? @text) {
-        SqliteType = SqliteType.Text;
-        AsText = @text;
+    private SqliteValue(string? value) {
+        if (value is null) {
+            SqliteType = SqliteType.Null;
+        }
+        else {
+            SqliteType = SqliteType.Text;
+            AsText = value;
+        }
     }
-    private SqliteValue(byte[]? @blob) {
-        SqliteType = SqliteType.Blob;
-        AsBlob = @blob;
+    private SqliteValue(byte[]? value) {
+        if (value is null) {
+            SqliteType = SqliteType.Null;
+        }
+        else {
+            SqliteType = SqliteType.Blob;
+            AsBlob = value;
+        }
     }
 
     public object? AsObject => SqliteType switch {
@@ -318,7 +338,9 @@ public readonly struct SqliteValue {
     public byte[] CastBlob => AsBlob ?? throw new NullReferenceException($"{nameof(SqliteValue)} was null");
 
     public static implicit operator SqliteValue(long? value) => new(value);
+    public static implicit operator SqliteValue(long value) => new(value);
     public static implicit operator SqliteValue(double? value) => new(value);
+    public static implicit operator SqliteValue(double value) => new(value);
     public static implicit operator SqliteValue(string? value) => new(value);
     public static implicit operator SqliteValue(byte[]? value) => new(value);
 }
